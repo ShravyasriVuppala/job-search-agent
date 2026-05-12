@@ -157,6 +157,17 @@ export interface RunningAgentContext {
   analyses: JobAnalysis[];
 }
 
+export interface SearchCriteria {
+  jobTitles: string[];
+  locationPriority: string[];
+  yearsExperience: number;
+  preferredStack: string[];
+}
+
+export interface JobFetcher {
+  fetch(criteria: SearchCriteria): Promise<Job[]>;
+}
+
 export type ApplicationStatus =
   | 'applied'
   | 'interview_scheduled'

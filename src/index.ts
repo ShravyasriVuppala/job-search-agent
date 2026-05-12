@@ -6,8 +6,14 @@ import { ResumeChangeDetectionService } from './services/resume-change.service';
 import { TokenBudgetService } from './services/token-budget.service';
 import { ClaudeService } from './services/claude.service';
 import { AutonomousAgent } from './services/agent.service';
+import { JobAggregatorService } from './services/job-aggregator.service';
+import { JSearchFetcher } from './services/job-fetchers/jsearch.fetcher';
+// import { HackerNewsAlgoliaFetcher } from './services/job-fetchers/hackernews.fetcher';
+// import { RemoteOKFetcher } from './services/job-fetchers/remoteok.fetcher';
+// import { AngelListFetcher } from './services/job-fetchers/angelist.fetcher';
 import { ResumeRepository } from './db/resume.repository';
 import { AgentMemoryRepository } from './db/agent-memory.repository';
+import { JobRepository } from './db/job.repository';
 import { agentContext } from './agent/context';
 
 // Resume loaded once at startup, kept in agentContext.resume
@@ -55,14 +61,25 @@ async function main(): Promise<void> {
 
     // Initialize agent services
     const agentMemoryRepository = new AgentMemoryRepository();
+    const jobRepository = new JobRepository();
     const tokenBudget = new TokenBudgetService();
     const claudeService = new ClaudeService(config.claudeApiKey, config.claudeModel, config.claudeMaxTokens);
+    const jobAggregator = new JobAggregatorService(
+      [
+        new JSearchFetcher(config.rapidApiKey),
+        // new HackerNewsAlgoliaFetcher(),
+        // new RemoteOKFetcher(),
+        // new AngelListFetcher(),
+      ],
+      jobRepository,
+    );
     const agent = new AutonomousAgent(
       config,
       resumeRepository,
       agentMemoryRepository,
       claudeService,
       tokenBudget,
+      jobAggregator,
     );
 
     // Expose agent for programmatic access (e.g. scheduler, tests)

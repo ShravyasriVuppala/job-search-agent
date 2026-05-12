@@ -1,6 +1,7 @@
-import { Config, Job, AgentMemory, JobAnalysis, RunningAgentContext } from '../types';
+import { Config, Job, AgentMemory, JobAnalysis, RunningAgentContext, SearchCriteria } from '../types';
 import { ClaudeService } from './claude.service';
 import { TokenBudgetService } from './token-budget.service';
+import { JobAggregatorService } from './job-aggregator.service';
 import { ResumeRepository } from '../db/resume.repository';
 import { AgentMemoryRepository } from '../db/agent-memory.repository';
 import { agentContext } from '../agent/context';
@@ -47,6 +48,7 @@ export class AutonomousAgent {
     private readonly agentMemoryRepository: AgentMemoryRepository,
     private readonly claudeService: ClaudeService,
     private readonly tokenBudget: TokenBudgetService,
+    private readonly jobAggregator?: JobAggregatorService,
   ) {}
 
   async runDailyLoop(): Promise<void> {
@@ -124,10 +126,18 @@ Be concise (2-3 sentences).`;
     return this.claudeService.call(prompt);
   }
 
-  // Phase 4 will implement real job fetching from APIs.
   async fetchJobs(): Promise<Job[]> {
-    logger.info('Job fetching not yet implemented — returning empty list (Phase 4)');
-    return [];
+    if (!this.jobAggregator) {
+      logger.info('No job aggregator configured — returning empty list');
+      return [];
+    }
+    const criteria: SearchCriteria = {
+      jobTitles: this.config.jobTitles,
+      locationPriority: this.config.locationPriority,
+      yearsExperience: this.config.yearsExperience,
+      preferredStack: this.config.preferredTechnicalStack,
+    };
+    return this.jobAggregator.fetchAndStoreJobs(criteria);
   }
 
   async analyzeJobs(jobs: Job[], context: RunningAgentContext): Promise<JobAnalysis[]> {
