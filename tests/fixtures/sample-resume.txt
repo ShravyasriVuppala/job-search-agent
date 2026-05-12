@@ -1,0 +1,35 @@
+John Smith
+Phone: 555-123-4567
+Email: john.smith@example.com
+SSN: 123-45-6789
+Seattle, WA 98101
+
+SUMMARY
+Senior Software Engineer with 7+ years of experience building distributed systems.
+
+EXPERIENCE
+
+Senior Software Engineer at Google (2019-2023)
+  - Built high-throughput data pipelines using Kafka and Elasticsearch
+  - Led a team of 5 engineers; mentoring junior members
+  - Java, Spring Boot, PostgreSQL, Docker, Kubernetes
+
+Staff Software Engineer at Microsoft (2023-present)
+  - Architected microservices platform serving 10M+ requests/day
+  - Leadership of cross-functional teams across 3 time zones
+  - Java, Spring Boot, Azure, Kafka, Redis
+
+SKILLS
+Java, Spring Boot, Kafka, Elasticsearch, PostgreSQL, Docker, Kubernetes, Redis, Python, AWS
+
+EDUCATION
+BS Computer Science, University of Washington
+
+CERTIFICATIONS
+AWS Solutions Architect - Associate
+
+SOFT SKILLS
+Leadership, mentoring, communication, collaboration, problem-solving
+
+References:
+Dr. Jane Doe, Professor, University of Washington, jane.doe@uw.edu, 206-555-9999
