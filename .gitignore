@@ -1,3 +1,15 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# User data (DO NOT COMMIT)
+resume.pdf
+resume.txt
+*.pdf              # All PDFs (safer catch-all)
+
 # Logs
 logs
 *.log

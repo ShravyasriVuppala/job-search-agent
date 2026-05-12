@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: job-search-agent-postgres
+    environment:
+      POSTGRES_DB: job_search_agent
+      POSTGRES_USER: jobagent
+      POSTGRES_PASSWORD: jobagent123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobagent -d job_search_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
