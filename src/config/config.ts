@@ -69,6 +69,12 @@ export function validateAndLoadConfig(): Config {
   const resumePath = requireEnv('RESUME_PATH');
   const resumeBase64 = optionalEnv('RESUME_BASE64');
 
+  const claudeModel = optionalEnv('CLAUDE_MODEL', 'claude-opus-4-7');
+  const claudeMaxTokens = parseInt(optionalEnv('CLAUDE_MAX_TOKENS', '4096'), 10);
+  if (isNaN(claudeMaxTokens) || claudeMaxTokens < 1 || claudeMaxTokens > 32_000) {
+    throw new Error('CLAUDE_MAX_TOKENS must be an integer between 1 and 32000');
+  }
+
   validateDatabaseUrl(databaseUrl);
   validateClaudeApiKey(claudeApiKey);
   validateSendgridApiKey(sendgridApiKey);
@@ -107,6 +113,8 @@ export function validateAndLoadConfig(): Config {
   return {
     databaseUrl,
     claudeApiKey,
+    claudeModel,
+    claudeMaxTokens,
     sendgridApiKey,
     recipientEmail,
     resumePath,

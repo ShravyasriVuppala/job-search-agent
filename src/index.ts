@@ -3,7 +3,11 @@ import { logger } from './utils/logger';
 import { getPool, testConnection, closePool } from './db/client';
 import { ResumeService } from './services/resume.service';
 import { ResumeChangeDetectionService } from './services/resume-change.service';
+import { TokenBudgetService } from './services/token-budget.service';
+import { ClaudeService } from './services/claude.service';
+import { AutonomousAgent } from './services/agent.service';
 import { ResumeRepository } from './db/resume.repository';
+import { AgentMemoryRepository } from './db/agent-memory.repository';
 import { agentContext } from './agent/context';
 
 // Resume loaded once at startup, kept in agentContext.resume
@@ -48,6 +52,25 @@ async function main(): Promise<void> {
 
     agentContext.resume = { redactedText, hash, metadata };
     logger.info('Resume loaded and redacted');
+
+    // Initialize agent services
+    const agentMemoryRepository = new AgentMemoryRepository();
+    const tokenBudget = new TokenBudgetService();
+    const claudeService = new ClaudeService(config.claudeApiKey, config.claudeModel, config.claudeMaxTokens);
+    const agent = new AutonomousAgent(
+      config,
+      resumeRepository,
+      agentMemoryRepository,
+      claudeService,
+      tokenBudget,
+    );
+
+    // Expose agent for programmatic access (e.g. scheduler, tests)
+    (global as Record<string, unknown>)['agent'] = agent;
+
+    logger.info('Agent initialized and ready');
+
+    // Phase 7 will add the scheduler that calls agent.runDailyLoop() at 8 AM PT.
 
     logger.info('System ready');
   } catch (error) {
