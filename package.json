@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "pdf-parse": "^1.1.4",
     "pg": "^8.12.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
@@ -24,10 +25,19 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.ts"],
-    "setupFiles": ["<rootDir>/tests/jest.setup.ts"],
+    "testMatch": [
+      "**/tests/**/*.test.ts"
+    ],
+    "setupFiles": [
+      "<rootDir>/tests/jest.setup.ts"
+    ],
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
     }
   }
 }
