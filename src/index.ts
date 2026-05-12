@@ -7,6 +7,7 @@ import { TokenBudgetService } from './services/token-budget.service';
 import { ClaudeService } from './services/claude.service';
 import { AutonomousAgent } from './services/agent.service';
 import { JobAggregatorService } from './services/job-aggregator.service';
+import { ClaudeAnalysisService } from './services/claude-analysis.service';
 import { JSearchFetcher } from './services/job-fetchers/jsearch.fetcher';
 // import { HackerNewsAlgoliaFetcher } from './services/job-fetchers/hackernews.fetcher';
 // import { RemoteOKFetcher } from './services/job-fetchers/remoteok.fetcher';
@@ -14,6 +15,7 @@ import { JSearchFetcher } from './services/job-fetchers/jsearch.fetcher';
 import { ResumeRepository } from './db/resume.repository';
 import { AgentMemoryRepository } from './db/agent-memory.repository';
 import { JobRepository } from './db/job.repository';
+import { ClaudeAnalysisRepository } from './db/claude-analysis.repository';
 import { agentContext } from './agent/context';
 
 // Resume loaded once at startup, kept in agentContext.resume
@@ -73,6 +75,8 @@ async function main(): Promise<void> {
       ],
       jobRepository,
     );
+    const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
+    const claudeAnalysisRepository = new ClaudeAnalysisRepository();
     const agent = new AutonomousAgent(
       config,
       resumeRepository,
@@ -80,6 +84,8 @@ async function main(): Promise<void> {
       claudeService,
       tokenBudget,
       jobAggregator,
+      claudeAnalysisService,
+      claudeAnalysisRepository,
     );
 
     // Expose agent for programmatic access (e.g. scheduler, tests)
