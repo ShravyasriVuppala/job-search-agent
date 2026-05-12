@@ -4,6 +4,8 @@ export interface Config {
 
   // Claude API
   claudeApiKey: string;
+  claudeModel: string;
+  claudeMaxTokens: number;
 
   // SendGrid
   sendgridApiKey: string;
@@ -112,6 +114,47 @@ export interface AgentMemory {
   nextStrategyFocus?: string;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface JobAnalysis {
+  job_id: string;
+  company: string;
+  relevance_score: number;
+  interview_chance: number;
+  location_category: string;
+  overall_category: string;
+  relevance_reasoning: string;
+  insights: string;
+  matched_patterns: string[];
+  cover_letter_draft?: string;
+}
+
+export interface TokenBudget {
+  maxContextTokens: number;
+  safetyMargin: number;
+  resume: number;
+  agentMemory: number;
+  jobsToAnalyze: number;
+  buffer: number;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface Tool {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+export interface RunningAgentContext {
+  resume: {
+    redactedText: string;
+    hash: string;
+    metadata: ResumeMetadata;
+  };
+  memory: AgentMemory[];
+  currentStrategy: string;
+  jobsToAnalyze: Job[];
+  analyses: JobAnalysis[];
 }
 
 export type ApplicationStatus =
