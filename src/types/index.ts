@@ -81,8 +81,31 @@ export interface Job {
   updatedAt?: Date;
 }
 
-export type OverallCategory = 'auto-flag' | 'needs-review' | 'skip';
+export type OverallCategory = 'auto-flag' | 'maybe-flag' | 'needs-review' | 'skip';
 export type LocationCategory = 'remote' | 'washington' | 'other';
+export type AnalysisCategory = 'auto-flag' | 'maybe-flag' | 'skip';
+
+export interface JobAnalysisResult {
+  relevanceScore: number;
+  interviewChance: number;
+  overallCategory: AnalysisCategory;
+  relevanceReasoning: string;
+  insights: string;
+  matchedPatterns: string[];
+}
+
+export interface CoverLetterResult {
+  opening: string;
+  body: string;
+  closing: string;
+}
+
+export interface PatternLearning {
+  topSkillsMatched: string[];
+  commonGaps: string[];
+  recommendedFocus: string[];
+  bestJobCategories: string[];
+}
 
 export interface ClaudeAnalysis {
   id?: string;

@@ -2,8 +2,10 @@ import { Config, Job, AgentMemory, JobAnalysis, RunningAgentContext, SearchCrite
 import { ClaudeService } from './claude.service';
 import { TokenBudgetService } from './token-budget.service';
 import { JobAggregatorService } from './job-aggregator.service';
+import { ClaudeAnalysisService } from './claude-analysis.service';
 import { ResumeRepository } from '../db/resume.repository';
 import { AgentMemoryRepository } from '../db/agent-memory.repository';
+import { ClaudeAnalysisRepository } from '../db/claude-analysis.repository';
 import { agentContext } from '../agent/context';
 import { logger } from '../utils/logger';
 
@@ -49,6 +51,8 @@ export class AutonomousAgent {
     private readonly claudeService: ClaudeService,
     private readonly tokenBudget: TokenBudgetService,
     private readonly jobAggregator?: JobAggregatorService,
+    private readonly claudeAnalysisService?: ClaudeAnalysisService,
+    private readonly claudeAnalysisRepository?: ClaudeAnalysisRepository,
   ) {}
 
   async runDailyLoop(): Promise<void> {
@@ -144,7 +148,57 @@ Be concise (2-3 sentences).`;
     const analyses: JobAnalysis[] = [];
     for (const job of jobs) {
       try {
-        const analysis = await this.analyzeJob(job, context);
+        let analysis: JobAnalysis;
+
+        if (this.claudeAnalysisService) {
+          const result = await this.claudeAnalysisService.analyzeJob(
+            job,
+            context.resume.redactedText,
+            context.resume.metadata.yearsExperience ?? 0,
+            this.config.preferredTechnicalStack,
+          );
+
+          let coverLetterDraft: string | undefined;
+          if (result.relevanceScore > 50) {
+            try {
+              const cl = await this.claudeAnalysisService.generateCoverLetter(
+                job,
+                result,
+                context.resume.redactedText,
+              );
+              coverLetterDraft = [cl.opening, cl.body, cl.closing].join('\n\n');
+            } catch (clErr) {
+              logger.warn(`Cover letter generation failed for "${job.title}" — skipping`, {
+                error: clErr instanceof Error ? clErr.message : String(clErr),
+              });
+            }
+          }
+
+          if (this.claudeAnalysisRepository && job.id) {
+            await this.claudeAnalysisRepository.saveAnalysis(
+              job.id,
+              result,
+              job.locationCategory ?? 'other',
+              coverLetterDraft,
+            );
+          }
+
+          analysis = {
+            job_id: job.id ?? '',
+            company: job.company,
+            relevance_score: result.relevanceScore,
+            interview_chance: result.interviewChance,
+            location_category: job.locationCategory ?? 'other',
+            overall_category: result.overallCategory,
+            relevance_reasoning: result.relevanceReasoning,
+            insights: result.insights,
+            matched_patterns: result.matchedPatterns,
+            cover_letter_draft: coverLetterDraft,
+          };
+        } else {
+          analysis = await this.analyzeJob(job, context);
+        }
+
         analyses.push(analysis);
         if (analyses.length % 10 === 0) {
           logger.info(`Analyzed ${analyses.length}/${jobs.length} jobs`);
@@ -234,7 +288,32 @@ Respond with ONLY valid JSON (no markdown):
       return [];
     }
 
-    const jobMap = new Map(jobs.map((j) => [j.id ?? '', j]));
+    if (this.claudeAnalysisService) {
+      try {
+        const learning = await this.claudeAnalysisService.learnPatterns(analyses);
+        logger.info('Pattern learning complete', {
+          topSkills: learning.topSkillsMatched,
+          focus: learning.recommendedFocus,
+        });
+        const successRate = analyses.filter((a) => a.overall_category !== 'skip').length / analyses.length;
+        return learning.recommendedFocus.map((focus) => ({
+          patternName: `focus_${focus.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`,
+          patternType: 'tech_preference' as const,
+          patternData: {
+            topSkills: learning.topSkillsMatched,
+            gaps: learning.commonGaps,
+            categories: learning.bestJobCategories,
+          },
+          confidenceScore: Math.min(0.4 + successRate * 0.4, 0.8),
+          observationCount: analyses.length,
+        }));
+      } catch (err) {
+        logger.error('ClaudeAnalysisService.learnPatterns failed — falling back to default', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const highValueLines = analyses
       .filter((a) => a.relevance_score >= 75)
       .map((a) => `- ${a.company}: patterns=[${a.matched_patterns.join(', ')}] score=${a.relevance_score}`)
