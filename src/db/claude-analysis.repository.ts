@@ -73,6 +73,186 @@ export class ClaudeAnalysisRepository {
   }
 }
 
+export interface JobWithAnalysis {
+  jobId: string;
+  title: string;
+  company: string;
+  location?: string;
+  locationCategory?: string;
+  applyUrl: string;
+  source: string;
+  relevanceScore: number;
+  interviewChance: number;
+  overallCategory: string;
+  relevanceReasoning?: string;
+  insights?: string;
+  matchedPatterns?: string[];
+  coverLetterDraft?: string;
+  analyzedAt?: Date;
+}
+
+export interface AnalysisWithJob {
+  job: {
+    id: string;
+    title: string;
+    company: string;
+    location?: string;
+    applyUrl: string;
+    source: string;
+  };
+  analysis: {
+    id: string;
+    relevanceScore: number;
+    interviewChance: number;
+    overallCategory: string;
+    relevanceReasoning?: string;
+    insights?: string;
+    matchedPatterns?: string[];
+    coverLetterDraft?: string;
+    analyzedAt?: Date;
+  };
+}
+
+export class ClaudeAnalysisQueryRepository {
+  async getJobsWithAnalysis(category: string): Promise<JobWithAnalysis[]> {
+    const pool = getPool();
+    const result = await pool.query<Record<string, unknown>>(
+      `SELECT
+         j.id AS job_id, j.title, j.company, j.location,
+         j.location_category, j.apply_url, j.source,
+         ca.relevance_score, ca.interview_chance, ca.overall_category,
+         ca.relevance_reasoning, ca.insights, ca.matched_patterns,
+         ca.cover_letter_draft, ca.analyzed_at
+       FROM jobs j
+       JOIN claude_analysis ca ON j.id = ca.job_id
+       WHERE ca.overall_category = $1 AND ca.is_stale = FALSE
+       ORDER BY ca.relevance_score DESC`,
+      [category],
+    );
+    return result.rows.map(mapJoinRow);
+  }
+
+  async getJobsByLocation(category: string): Promise<JobWithAnalysis[]> {
+    const pool = getPool();
+    const result = await pool.query<Record<string, unknown>>(
+      `SELECT
+         j.id AS job_id, j.title, j.company, j.location,
+         j.location_category, j.apply_url, j.source,
+         ca.relevance_score, ca.interview_chance, ca.overall_category,
+         ca.relevance_reasoning, ca.insights, ca.matched_patterns,
+         ca.cover_letter_draft, ca.analyzed_at
+       FROM jobs j
+       JOIN claude_analysis ca ON j.id = ca.job_id
+       WHERE j.location_category = $1 AND ca.is_stale = FALSE
+       ORDER BY ca.relevance_score DESC`,
+      [category],
+    );
+    return result.rows.map(mapJoinRow);
+  }
+
+  async getAllWithJobs(limit = 50, offset = 0): Promise<{ rows: AnalysisWithJob[]; total: number }> {
+    const pool = getPool();
+    const [dataResult, countResult] = await Promise.all([
+      pool.query<Record<string, unknown>>(
+        `SELECT
+           j.id AS job_id, j.title, j.company, j.location, j.apply_url, j.source,
+           ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
+           ca.overall_category, ca.relevance_reasoning, ca.insights,
+           ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
+         FROM jobs j
+         JOIN claude_analysis ca ON j.id = ca.job_id
+         WHERE ca.is_stale = FALSE
+         ORDER BY ca.analyzed_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      ),
+      pool.query<{ count: string }>(`SELECT COUNT(*) FROM claude_analysis WHERE is_stale = FALSE`),
+    ]);
+
+    const rows = dataResult.rows.map((row) => ({
+      job: {
+        id: row.job_id as string,
+        title: row.title as string,
+        company: row.company as string,
+        location: row.location as string | undefined,
+        applyUrl: row.apply_url as string,
+        source: row.source as string,
+      },
+      analysis: {
+        id: row.analysis_id as string,
+        relevanceScore: parseFloat(row.relevance_score as string),
+        interviewChance: parseFloat(row.interview_chance as string),
+        overallCategory: row.overall_category as string,
+        relevanceReasoning: row.relevance_reasoning as string | undefined,
+        insights: row.insights as string | undefined,
+        matchedPatterns: row.matched_patterns as string[] | undefined,
+        coverLetterDraft: row.cover_letter_draft as string | undefined,
+        analyzedAt: row.analyzed_at as Date | undefined,
+      },
+    }));
+
+    return { rows, total: parseInt(countResult.rows[0].count, 10) };
+  }
+
+  async getWithJob(jobId: string): Promise<AnalysisWithJob | null> {
+    const pool = getPool();
+    const result = await pool.query<Record<string, unknown>>(
+      `SELECT
+         j.id AS job_id, j.title, j.company, j.location, j.apply_url, j.source,
+         ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
+         ca.overall_category, ca.relevance_reasoning, ca.insights,
+         ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
+       FROM jobs j
+       JOIN claude_analysis ca ON j.id = ca.job_id
+       WHERE j.id = $1`,
+      [jobId],
+    );
+    if (!result.rows[0]) return null;
+    const row = result.rows[0];
+    return {
+      job: {
+        id: row.job_id as string,
+        title: row.title as string,
+        company: row.company as string,
+        location: row.location as string | undefined,
+        applyUrl: row.apply_url as string,
+        source: row.source as string,
+      },
+      analysis: {
+        id: row.analysis_id as string,
+        relevanceScore: parseFloat(row.relevance_score as string),
+        interviewChance: parseFloat(row.interview_chance as string),
+        overallCategory: row.overall_category as string,
+        relevanceReasoning: row.relevance_reasoning as string | undefined,
+        insights: row.insights as string | undefined,
+        matchedPatterns: row.matched_patterns as string[] | undefined,
+        coverLetterDraft: row.cover_letter_draft as string | undefined,
+        analyzedAt: row.analyzed_at as Date | undefined,
+      },
+    };
+  }
+}
+
+function mapJoinRow(row: Record<string, unknown>): JobWithAnalysis {
+  return {
+    jobId: row.job_id as string,
+    title: row.title as string,
+    company: row.company as string,
+    location: row.location as string | undefined,
+    locationCategory: row.location_category as string | undefined,
+    applyUrl: row.apply_url as string,
+    source: row.source as string,
+    relevanceScore: parseFloat(row.relevance_score as string),
+    interviewChance: parseFloat(row.interview_chance as string),
+    overallCategory: row.overall_category as string,
+    relevanceReasoning: row.relevance_reasoning as string | undefined,
+    insights: row.insights as string | undefined,
+    matchedPatterns: row.matched_patterns as string[] | undefined,
+    coverLetterDraft: row.cover_letter_draft as string | undefined,
+    analyzedAt: row.analyzed_at as Date | undefined,
+  };
+}
+
 function mapRow(row: Record<string, unknown>): ClaudeAnalysis {
   return {
     id: row.id as string,
