@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "test": "jest --runInBand --forceExit",
-    "test:coverage": "jest --runInBand --forceExit --coverage"
+    "test:coverage": "jest --runInBand --forceExit --coverage",
+    "pipeline": "ts-node src/test-full-pipeline.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",

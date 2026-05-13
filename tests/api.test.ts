@@ -1,9 +1,13 @@
+import http from 'http';
 import request from 'supertest';
-import app from '../src/app';
+import { createApp } from '../src/app';
 import { ClaudeAnalysisQueryRepository } from '../src/db/claude-analysis.repository';
 import { AgentMemoryRepository } from '../src/db/agent-memory.repository';
 import { ApplicationRepository } from '../src/db/application.repository';
 
+let server: http.Server;
+beforeAll(() => { server = createApp(['remote', 'washington', 'other']).listen(0); });
+afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 afterEach(() => jest.restoreAllMocks());
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -73,7 +77,7 @@ describe('GET /api/jobs/auto-flagged', () => {
       .spyOn(ClaudeAnalysisQueryRepository.prototype, 'getJobsWithAnalysis')
       .mockResolvedValue([fakeJob]);
 
-    const res = await request(app).get('/api/jobs/auto-flagged');
+    const res = await request(server).get('/api/jobs/auto-flagged');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -91,7 +95,7 @@ describe('GET /api/jobs/by-location', () => {
       .spyOn(ClaudeAnalysisQueryRepository.prototype, 'getJobsByLocation')
       .mockResolvedValue([fakeJob]);
 
-    const res = await request(app).get('/api/jobs/by-location?category=remote');
+    const res = await request(server).get('/api/jobs/by-location?category=remote');
 
     expect(res.status).toBe(200);
     expect(res.body.data.category).toBe('remote');
@@ -99,7 +103,7 @@ describe('GET /api/jobs/by-location', () => {
   });
 
   it('returns 400 for invalid category', async () => {
-    const res = await request(app).get('/api/jobs/by-location?category=invalid');
+    const res = await request(server).get('/api/jobs/by-location?category=invalid');
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
@@ -113,7 +117,7 @@ describe('GET /api/analyses', () => {
       .spyOn(ClaudeAnalysisQueryRepository.prototype, 'getAllWithJobs')
       .mockResolvedValue({ rows: [fakeAnalysisWithJob], total: 42 });
 
-    const res = await request(app).get('/api/analyses');
+    const res = await request(server).get('/api/analyses');
 
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(42);
@@ -130,7 +134,7 @@ describe('GET /api/analyses/:jobId', () => {
       .spyOn(ClaudeAnalysisQueryRepository.prototype, 'getWithJob')
       .mockResolvedValue(fakeAnalysisWithJob);
 
-    const res = await request(app).get('/api/analyses/job-uuid-1');
+    const res = await request(server).get('/api/analyses/job-uuid-1');
 
     expect(res.status).toBe(200);
     expect(res.body.data.job.id).toBe('job-uuid-1');
@@ -142,7 +146,7 @@ describe('GET /api/analyses/:jobId', () => {
       .spyOn(ClaudeAnalysisQueryRepository.prototype, 'getWithJob')
       .mockResolvedValue(null);
 
-    const res = await request(app).get('/api/analyses/nonexistent');
+    const res = await request(server).get('/api/analyses/nonexistent');
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
   });
@@ -167,7 +171,7 @@ describe('GET /api/patterns', () => {
       },
     ]);
 
-    const res = await request(app).get('/api/patterns');
+    const res = await request(server).get('/api/patterns');
 
     expect(res.status).toBe(200);
     expect(res.body.data.patterns.topSkillsMatched).toContain('Kafka');
@@ -183,7 +187,7 @@ describe('POST /api/applications', () => {
       .spyOn(ApplicationRepository.prototype, 'recordApplication')
       .mockResolvedValue(fakeApplication);
 
-    const res = await request(app)
+    const res = await request(server)
       .post('/api/applications')
       .send({ jobId: 'job-uuid-1' });
 
@@ -193,7 +197,7 @@ describe('POST /api/applications', () => {
   });
 
   it('returns 400 when jobId is missing', async () => {
-    const res = await request(app).post('/api/applications').send({});
+    const res = await request(server).post('/api/applications').send({});
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
@@ -207,7 +211,7 @@ describe('GET /api/applications', () => {
       .spyOn(ApplicationRepository.prototype, 'getApplications')
       .mockResolvedValue([fakeApplicationWithJob]);
 
-    const res = await request(app).get('/api/applications');
+    const res = await request(server).get('/api/applications');
 
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(1);
@@ -223,7 +227,7 @@ describe('PATCH /api/applications/:jobId', () => {
       .spyOn(ApplicationRepository.prototype, 'updateApplicationStatus')
       .mockResolvedValue({ ...fakeApplication, status: 'rejected' });
 
-    const res = await request(app)
+    const res = await request(server)
       .patch('/api/applications/job-uuid-1')
       .send({ status: 'rejected' });
 
@@ -232,7 +236,7 @@ describe('PATCH /api/applications/:jobId', () => {
   });
 
   it('returns 400 for invalid status', async () => {
-    const res = await request(app)
+    const res = await request(server)
       .patch('/api/applications/job-uuid-1')
       .send({ status: 'ghosted' });
     expect(res.status).toBe(400);
@@ -244,7 +248,7 @@ describe('PATCH /api/applications/:jobId', () => {
       .spyOn(ApplicationRepository.prototype, 'updateApplicationStatus')
       .mockResolvedValue(null);
 
-    const res = await request(app)
+    const res = await request(server)
       .patch('/api/applications/nonexistent')
       .send({ status: 'rejected' });
     expect(res.status).toBe(404);

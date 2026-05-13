@@ -124,7 +124,7 @@ export function validateAndLoadConfig(): Config {
       optionalEnv('JOB_TITLES', 'Senior Software Engineer'),
     ),
     locationPriority: parseCommaSeparated(
-      optionalEnv('LOCATION_PRIORITY', 'remote,washington,others'),
+      optionalEnv('LOCATION_PRIORITY', 'remote,washington,other'),
     ),
     yearsExperience,
     preferredCompanyStage: parseCommaSeparated(

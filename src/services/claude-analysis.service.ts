@@ -9,6 +9,16 @@ import {
 } from '../types';
 import { logger } from '../utils/logger';
 
+const CALL_TIMEOUT_MS = 60_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Claude API call timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function extractJson<T>(text: string): T {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No JSON found in Claude response');
@@ -54,11 +64,14 @@ Respond with ONLY valid JSON (no markdown):
 
 Scoring: 80+ = auto-flag, 50-79 = maybe-flag, <50 = skip`;
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 500,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: this.model,
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CALL_TIMEOUT_MS,
+    );
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -109,11 +122,14 @@ Respond with ONLY valid JSON (no markdown):
   "closing": "<one sentence closing>"
 }`;
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 400,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: this.model,
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CALL_TIMEOUT_MS,
+    );
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -149,11 +165,14 @@ Respond with ONLY valid JSON (no markdown):
   "bestJobCategories": ["<category>"]
 }`;
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 400,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const response = await withTimeout(
+      this.client.messages.create({
+        model: this.model,
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      CALL_TIMEOUT_MS,
+    );
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

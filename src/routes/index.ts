@@ -1,13 +1,15 @@
 import { Router } from 'express';
-import jobsRouter from './jobs';
+import { createJobsRouter } from './jobs';
 import analysesRouter, { patternsRouter } from './analyses';
 import applicationsRouter from './applications';
 
-const router = Router();
+export function createApiRouter(locationPriority: string[]): Router {
+  const router = Router();
 
-router.use('/jobs', jobsRouter);
-router.use('/analyses', analysesRouter);
-router.use('/patterns', patternsRouter);
-router.use('/applications', applicationsRouter);
+  router.use('/jobs', createJobsRouter(locationPriority));
+  router.use('/analyses', analysesRouter);
+  router.use('/patterns', patternsRouter);
+  router.use('/applications', applicationsRouter);
 
-export default router;
+  return router;
+}
