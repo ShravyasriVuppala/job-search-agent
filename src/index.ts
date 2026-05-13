@@ -1,6 +1,8 @@
 import { validateAndLoadConfig } from './config/config';
 import { logger } from './utils/logger';
 import { getPool, testConnection, closePool } from './db/client';
+import { Server } from 'http';
+import app from './app';
 import { ResumeService } from './services/resume.service';
 import { ResumeChangeDetectionService } from './services/resume-change.service';
 import { TokenBudgetService } from './services/token-budget.service';
@@ -95,7 +97,22 @@ async function main(): Promise<void> {
 
     // Phase 7 will add the scheduler that calls agent.runDailyLoop() at 8 AM PT.
 
+    const port = parseInt(process.env['PORT'] ?? '3001', 10);
+    const server: Server = app.listen(port, () => {
+      logger.info(`REST API listening on port ${port}`);
+    });
+
     logger.info('System ready');
+
+    async function shutdown(signal: string): Promise<void> {
+      logger.info(`${signal} received — shutting down`);
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await closePool();
+      process.exit(0);
+    }
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
     logger.error('Startup failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -103,17 +120,5 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 }
-
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received — shutting down');
-  await closePool();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received — shutting down');
-  await closePool();
-  process.exit(0);
-});
 
 main();
