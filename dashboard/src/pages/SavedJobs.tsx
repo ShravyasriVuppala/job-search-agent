@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RawJob } from '../types';
-import { getAllJobs, setJobInteraction } from '../services/api';
+import { getSavedJobs, setJobInteraction } from '../services/api';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,6 @@ const STATUS_COLOR: Record<string, string> = {
   skip: 'bg-red-100 text-red-600',
   pending: 'bg-gray-100 text-gray-500',
 };
-// Lower = higher priority for ascending sort
 const STATUS_ORDER: Record<string, number> = {
   'auto-flag': 0,
   'maybe-flag': 1,
@@ -37,8 +36,6 @@ const STATUS_ORDER: Record<string, number> = {
 function statusKey(job: RawJob): string {
   return job.isAnalyzed ? (job.overallCategory ?? 'pending') : 'pending';
 }
-
-// ─── sub-components ──────────────────────────────────────────────────────────
 
 function StatusBadge({ job }: { job: RawJob }) {
   const key = statusKey(job);
@@ -52,15 +49,12 @@ function StatusBadge({ job }: { job: RawJob }) {
 type SortCol = 'company' | 'title' | 'location' | 'postedAt' | 'status';
 
 function SortIcon({ col, sort }: { col: SortCol; sort: { col: SortCol; dir: 'asc' | 'desc' } }) {
-  if (sort.col !== col) {
-    return <span className="ml-1 text-gray-300 select-none">↕</span>;
-  }
+  if (sort.col !== col) return <span className="ml-1 text-gray-300 select-none">↕</span>;
   return <span className="ml-1 text-blue-500 select-none">{sort.dir === 'asc' ? '↑' : '↓'}</span>;
 }
 
 function SortableTh({ col, label, sort, onSort }: {
-  col: SortCol;
-  label: string;
+  col: SortCol; label: string;
   sort: { col: SortCol; dir: 'asc' | 'desc' };
   onSort: (col: SortCol) => void;
 }) {
@@ -69,8 +63,7 @@ function SortableTh({ col, label, sort, onSort }: {
       className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-800 whitespace-nowrap"
       onClick={() => onSort(col)}
     >
-      {label}
-      <SortIcon col={col} sort={sort} />
+      {label}<SortIcon col={col} sort={sort} />
     </th>
   );
 }
@@ -79,9 +72,7 @@ function SkeletonRow() {
   return (
     <tr className="animate-pulse">
       {Array.from({ length: 6 }).map((_, i) => (
-        <td key={i} className="px-4 py-3">
-          <div className="h-4 bg-gray-100 rounded w-full" />
-        </td>
+        <td key={i} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-full" /></td>
       ))}
     </tr>
   );
@@ -89,23 +80,18 @@ function SkeletonRow() {
 
 // ─── main component ──────────────────────────────────────────────────────────
 
-export function AllJobs() {
+export function SavedJobs() {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<RawJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
   const [locationFilter, setLocationFilter] = useState('all');
-  const [showHidden, setShowHidden] = useState(false);
-
-  // sort — default: newest first
   const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'postedAt', dir: 'desc' });
 
   useEffect(() => {
-    getAllJobs(500).then((data) => {
+    getSavedJobs(500).then((data) => {
       if (data === null) setError(true);
       else setJobs(data);
       setIsLoading(false);
@@ -116,40 +102,37 @@ export function AllJobs() {
     async (e: React.MouseEvent, jobId: string, type: 'saved' | 'not_interested', current: boolean) => {
       e.stopPropagation();
       const next = !current;
-      setJobs((prev) =>
-        prev.map((j) =>
-          j.id === jobId
-            ? { ...j, isSaved: type === 'saved' ? next : j.isSaved, isNotInterested: type === 'not_interested' ? next : j.isNotInterested }
-            : j,
-        ),
-      );
+      if (type === 'saved' && !next) {
+        // Unsaving removes the job from this page
+        setJobs((prev) => prev.filter((j) => j.id !== jobId));
+      } else {
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === jobId
+              ? { ...j, isSaved: type === 'saved' ? next : j.isSaved, isNotInterested: type === 'not_interested' ? next : j.isNotInterested }
+              : j,
+          ),
+        );
+      }
       await setJobInteraction(jobId, type, next);
     },
     [],
   );
 
-  // derive unique location categories from loaded data
   const locationOptions = useMemo(() => {
     const cats = new Set(jobs.map((j) => j.locationCategory).filter(Boolean) as string[]);
     return ['all', ...Array.from(cats).sort()];
   }, [jobs]);
 
-  const hiddenCount = useMemo(() => jobs.filter((j) => j.isNotInterested).length, [jobs]);
-
-  // filter
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return jobs.filter((j) => {
-      if (!showHidden && j.isNotInterested) return false;
-      if (statusFilter === 'analyzed' && !j.isAnalyzed) return false;
-      if (statusFilter === 'pending' && j.isAnalyzed) return false;
       if (locationFilter !== 'all' && j.locationCategory !== locationFilter) return false;
       if (q && !j.company.toLowerCase().includes(q) && !j.title.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [jobs, search, statusFilter, locationFilter, showHidden]);
+  }, [jobs, search, locationFilter]);
 
-  // sort
   const sorted = useMemo(() => {
     const { col, dir } = sort;
     const mul = dir === 'asc' ? 1 : -1;
@@ -171,9 +154,7 @@ export function AllJobs() {
 
   function toggleSort(col: SortCol) {
     setSort((prev) =>
-      prev.col === col
-        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { col, dir: 'asc' }
+      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
     );
   }
 
@@ -182,12 +163,11 @@ export function AllJobs() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-5">
 
-      {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">All Fetched Jobs</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Saved Jobs</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {isLoading ? 'Loading…' : `${sorted.length} of ${jobs.length} jobs`}
+            {isLoading ? 'Loading…' : `${sorted.length} of ${jobs.length} saved`}
           </p>
         </div>
         <input
@@ -199,26 +179,7 @@ export function AllJobs() {
         />
       </div>
 
-      {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Status pills */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 text-sm">
-          {(['all', 'analyzed', 'pending'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className={`px-3 py-1.5 rounded-md capitalize transition-colors ${
-                statusFilter === f
-                  ? 'bg-white text-gray-900 shadow-sm font-medium'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        {/* Location dropdown */}
         {locationOptions.length > 1 && (
           <select
             value={locationFilter}
@@ -232,25 +193,9 @@ export function AllJobs() {
             ))}
           </select>
         )}
-
-        {/* Show hidden toggle */}
-        {hiddenCount > 0 && (
+        {(search || locationFilter !== 'all') && (
           <button
-            onClick={() => setShowHidden((v) => !v)}
-            className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-              showHidden
-                ? 'border-gray-400 bg-gray-100 text-gray-700'
-                : 'border-gray-200 text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            {showHidden ? `Hide hidden (${hiddenCount})` : `Show hidden (${hiddenCount})`}
-          </button>
-        )}
-
-        {/* Clear filters */}
-        {(search || statusFilter !== 'all' || locationFilter !== 'all') && (
-          <button
-            onClick={() => { setSearch(''); setStatusFilter('all'); setLocationFilter('all'); }}
+            onClick={() => { setSearch(''); setLocationFilter('all'); }}
             className="text-xs text-blue-600 hover:underline"
           >
             Clear filters
@@ -260,11 +205,10 @@ export function AllJobs() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-          Failed to load jobs. Make sure the backend is running on port 3001.
+          Failed to load saved jobs. Make sure the backend is running on port 3001.
         </div>
       )}
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -280,47 +224,35 @@ export function AllJobs() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading
-                ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
+                ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
                 : sorted.length === 0
                 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-gray-400 text-sm">
-                      No jobs match the current filters.
+                      {jobs.length === 0 ? 'No saved jobs yet. Save jobs from All Jobs or a job detail page.' : 'No jobs match the current filters.'}
                     </td>
                   </tr>
                 )
                 : sorted.map((job) => (
                   <tr
                     key={job.id}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${job.isNotInterested ? 'opacity-50' : ''}`}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/job/${job.id}`)}
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[160px] truncate">
-                      {job.company}
-                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[160px] truncate">{job.company}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 max-w-[260px]">
                       <span className="line-clamp-2">{job.title}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                      {job.location ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                      {formatDate(job.postedAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge job={job} />
-                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{job.location ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(job.postedAt)}</td>
+                    <td className="px-4 py-3"><StatusBadge job={job} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         <button
                           onClick={(e) => handleInteraction(e, job.id, 'saved', job.isSaved)}
-                          className={`text-xs px-2 py-1 rounded border transition-colors ${
-                            job.isSaved
-                              ? 'border-blue-300 bg-blue-50 text-blue-700'
-                              : 'border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-200'
-                          }`}
+                          className="text-xs px-2 py-1 rounded border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                         >
-                          {job.isSaved ? '✓ Saved' : 'Save'}
+                          ✓ Saved
                         </button>
                         <button
                           onClick={(e) => handleInteraction(e, job.id, 'not_interested', job.isNotInterested)}

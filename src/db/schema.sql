@@ -168,3 +168,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_applications_unique_job
   ON applications (job_id);
 CREATE INDEX IF NOT EXISTS idx_applications_status
   ON applications (status);
+
+-- ============================================================
+-- job_interactions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS job_interactions (
+  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id           UUID        NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  interaction_type VARCHAR(20) NOT NULL CHECK (interaction_type IN ('saved', 'not_interested')),
+  created_at       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (job_id, interaction_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_interactions_job_id
+  ON job_interactions (job_id);
+CREATE INDEX IF NOT EXISTS idx_job_interactions_type
+  ON job_interactions (interaction_type);
+
+-- For existing databases, run:
+-- CREATE TABLE IF NOT EXISTS job_interactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE, interaction_type VARCHAR(20) NOT NULL CHECK (interaction_type IN ('saved', 'not_interested')), created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (job_id, interaction_type));
+-- CREATE INDEX IF NOT EXISTS idx_job_interactions_job_id ON job_interactions (job_id);
+-- CREATE INDEX IF NOT EXISTS idx_job_interactions_type ON job_interactions (interaction_type);

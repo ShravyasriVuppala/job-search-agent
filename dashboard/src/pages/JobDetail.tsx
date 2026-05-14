@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { JobDetail } from '../types';
 import { CategoryBadge } from '../components/CategoryBadge';
-import { getJobDetail, recordApplication } from '../services/api';
+import { getJobDetail, recordApplication, setJobInteraction } from '../services/api';
 
 export function JobDetail() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -12,11 +12,15 @@ export function JobDetail() {
   const [coverOpen, setCoverOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isNotInterested, setIsNotInterested] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
     getJobDetail(jobId).then((data) => {
       setItem(data);
+      setIsSaved(data?.job.isSaved ?? false);
+      setIsNotInterested(data?.job.isNotInterested ?? false);
       setIsLoading(false);
     });
   }, [jobId]);
@@ -52,6 +56,18 @@ export function JobDetail() {
     setApplied(true);
   }
 
+  async function handleToggleSaved() {
+    const next = !isSaved;
+    setIsSaved(next);
+    await setJobInteraction(job.id, 'saved', next);
+  }
+
+  async function handleToggleNotInterested() {
+    const next = !isNotInterested;
+    setIsNotInterested(next);
+    await setJobInteraction(job.id, 'not_interested', next);
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <button onClick={() => navigate(-1)} className="text-sm text-blue-600 hover:underline">
@@ -75,7 +91,7 @@ export function JobDetail() {
         </div>
         {job.location && <p className="text-sm text-gray-400">{job.location}</p>}
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-wrap gap-3 pt-2">
           <a
             href={job.applyUrl}
             target="_blank"
@@ -90,6 +106,26 @@ export function JobDetail() {
             className="px-5 py-2 border border-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
             {applied ? 'Marked as Applied ✓' : applying ? 'Saving…' : 'Mark as Applied'}
+          </button>
+          <button
+            onClick={handleToggleSaved}
+            className={`px-5 py-2 border text-sm rounded-md transition-colors ${
+              isSaved
+                ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {isSaved ? '✓ Saved' : 'Save Job'}
+          </button>
+          <button
+            onClick={handleToggleNotInterested}
+            className={`px-5 py-2 border text-sm rounded-md transition-colors ${
+              isNotInterested
+                ? 'border-gray-300 bg-gray-100 text-gray-500 hover:bg-gray-200'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {isNotInterested ? 'Undo Hide' : 'Not Interested'}
           </button>
         </div>
       </div>
