@@ -1,4 +1,4 @@
-import type { JobWithAnalysis, Patterns, Application, ApplicationStatus } from '../types';
+import type { JobWithAnalysis, JobDetail, RawJob, Patterns, Application, ApplicationStatus } from '../types';
 
 const BASE_URL = 'http://localhost:3001/api';
 
@@ -81,8 +81,14 @@ export async function getAllAnalyses(limit = 50, offset = 0): Promise<{ analyses
   return { analyses: data?.analyses ?? [], total: 0 };
 }
 
-export async function getAnalysis(jobId: string): Promise<JobWithAnalysis | null> {
-  return request<JobWithAnalysis>(`/analyses/${jobId}`);
+export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
+  return request<JobDetail>(`/jobs/${jobId}`);
+}
+
+export async function getAllJobs(limit = 200): Promise<RawJob[] | null> {
+  const data = await request<{ jobs: RawJob[] }>(`/jobs/all?limit=${limit}`);
+  if (data === null) return null;
+  return data.jobs ?? [];
 }
 
 export async function getJobsByLocation(category: string): Promise<JobWithAnalysis[]> {

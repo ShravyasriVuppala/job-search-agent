@@ -31,6 +31,28 @@ export interface JobWithAnalysis {
   analysis: Analysis;
 }
 
+export interface JobDetail {
+  job: Job;
+  analysis: Analysis | null;
+}
+
+export interface RawJob {
+  id: string;
+  title: string;
+  company: string;
+  location?: string;
+  locationCategory?: string;
+  applyUrl: string;
+  source: string;
+  postedAt?: string;
+  fetchedAt?: string;
+  isAnalyzed: boolean;
+  relevanceScore?: number;
+  interviewChance?: number;
+  overallCategory?: string;
+  analyzedAt?: string;
+}
+
 export interface Patterns {
   topSkillsMatched: string[];
   commonGaps: string[];

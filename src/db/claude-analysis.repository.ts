@@ -125,6 +125,29 @@ export interface AnalysisWithJob {
   };
 }
 
+// Used only by getJobWithOptionalAnalysis (LEFT JOIN — analysis may be absent)
+export interface JobDetailResult {
+  job: AnalysisWithJob['job'];
+  analysis: AnalysisWithJob['analysis'] | null;
+}
+
+export interface RawJobWithOptionalAnalysis {
+  id: string;
+  title: string;
+  company: string;
+  location?: string;
+  locationCategory?: string;
+  applyUrl: string;
+  source: string;
+  postedAt?: Date;
+  fetchedAt?: Date;
+  isAnalyzed: boolean;
+  relevanceScore?: number;
+  interviewChance?: number;
+  overallCategory?: string;
+  analyzedAt?: Date;
+}
+
 export class ClaudeAnalysisQueryRepository {
   async getJobsWithAnalysis(category: string): Promise<JobWithAnalysis[]> {
     const pool = getPool();
@@ -217,6 +240,94 @@ export class ClaudeAnalysisQueryRepository {
     }));
 
     return { rows, total: parseInt(countResult.rows[0].count, 10) };
+  }
+
+  async getAllJobs(limit = 100, offset = 0): Promise<{ rows: RawJobWithOptionalAnalysis[]; total: number }> {
+    const pool = getPool();
+    const [dataResult, countResult] = await Promise.all([
+      pool.query<Record<string, unknown>>(
+        `SELECT
+           j.id, j.title, j.company, j.location, j.location_category,
+           j.apply_url, j.source, j.posted_at, j.fetched_at,
+           ca.relevance_score, ca.interview_chance, ca.overall_category, ca.analyzed_at
+         FROM jobs j
+         LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
+         ORDER BY j.posted_at DESC NULLS LAST
+         LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      ),
+      pool.query<{ count: string }>(`SELECT COUNT(*) FROM jobs`),
+    ]);
+
+    const rows = dataResult.rows.map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      company: row.company as string,
+      location: row.location as string | undefined,
+      locationCategory: row.location_category as string | undefined,
+      applyUrl: row.apply_url as string,
+      source: row.source as string,
+      postedAt: row.posted_at as Date | undefined,
+      fetchedAt: row.fetched_at as Date | undefined,
+      isAnalyzed: row.overall_category != null,
+      relevanceScore: row.relevance_score != null ? parseFloat(row.relevance_score as string) : undefined,
+      interviewChance: row.interview_chance != null ? parseFloat(row.interview_chance as string) : undefined,
+      overallCategory: row.overall_category as string | undefined,
+      analyzedAt: row.analyzed_at as Date | undefined,
+    }));
+
+    return { rows, total: parseInt(countResult.rows[0].count, 10) };
+  }
+
+  async getJobWithOptionalAnalysis(jobId: string): Promise<JobDetailResult | null> {
+    const pool = getPool();
+    const result = await pool.query<Record<string, unknown>>(
+      `SELECT
+         j.id AS job_id, j.title, j.company, j.location, j.location_category,
+         j.description, j.apply_url, j.source, j.posted_at,
+         j.recruiter_name, j.recruiter_email,
+         j.company_hiring_url, j.company_size, j.company_website,
+         ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
+         ca.overall_category, ca.relevance_reasoning, ca.insights,
+         ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
+       FROM jobs j
+       LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
+       WHERE j.id = $1`,
+      [jobId],
+    );
+    if (!result.rows[0]) return null;
+    const row = result.rows[0];
+    const hasAnalysis = row.analysis_id != null;
+    return {
+      job: {
+        id: row.job_id as string,
+        title: row.title as string,
+        company: row.company as string,
+        location: row.location as string | undefined,
+        locationCategory: row.location_category as string | undefined,
+        description: row.description as string | undefined,
+        applyUrl: row.apply_url as string,
+        source: row.source as string,
+        recruiterName: row.recruiter_name as string | undefined,
+        recruiterEmail: row.recruiter_email as string | undefined,
+        companyHiringUrl: row.company_hiring_url as string | undefined,
+        companySize: row.company_size as string | undefined,
+        companyWebsite: row.company_website as string | undefined,
+      },
+      analysis: hasAnalysis
+        ? {
+            id: row.analysis_id as string,
+            relevanceScore: parseFloat(row.relevance_score as string),
+            interviewChance: parseFloat(row.interview_chance as string),
+            overallCategory: row.overall_category as string,
+            relevanceReasoning: row.relevance_reasoning as string | undefined,
+            insights: row.insights as string | undefined,
+            matchedPatterns: row.matched_patterns as string[] | undefined,
+            coverLetterDraft: row.cover_letter_draft as string | undefined,
+            analyzedAt: row.analyzed_at as Date | undefined,
+          }
+        : null,
+    };
   }
 
   async getWithJob(jobId: string): Promise<AnalysisWithJob | null> {

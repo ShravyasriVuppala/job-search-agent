@@ -12,6 +12,7 @@ export function Navbar() {
         <span className="font-bold text-gray-900">Job Search Agent</span>
         <div className="flex items-center gap-1">
           <NavLink to="/" end className={linkClass}>Dashboard</NavLink>
+          <NavLink to="/all-jobs" className={linkClass}>All Jobs</NavLink>
           <NavLink to="/applications" className={linkClass}>Applications</NavLink>
         </div>
       </div>

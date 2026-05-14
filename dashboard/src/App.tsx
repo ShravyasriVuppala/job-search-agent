@@ -3,6 +3,7 @@ import { Navbar } from './components/Navbar';
 import { Dashboard } from './pages/Dashboard';
 import { JobDetail } from './pages/JobDetail';
 import { Applications } from './pages/Applications';
+import { AllJobs } from './pages/AllJobs';
 
 function NotFound() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/job/:jobId" element={<JobDetail />} />
           <Route path="/applications" element={<Applications />} />
+          <Route path="/all-jobs" element={<AllJobs />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
