@@ -62,7 +62,7 @@ Respond with ONLY valid JSON (no markdown):
   "matchedPatterns": ["<pattern>"]
 }
 
-Scoring: 80+ = auto-flag, 50-79 = maybe-flag, <50 = skip`;
+Scoring: 75+ = auto-flag, 50-74 = maybe-flag, <50 = skip`;
 
     const response = await withTimeout(
       this.client.messages.create({
