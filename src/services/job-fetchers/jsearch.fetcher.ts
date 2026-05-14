@@ -19,7 +19,7 @@ export class JSearchFetcher implements JobFetcher {
           'X-RapidAPI-Key': this.apiKey,
           'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
         },
-        timeout: 15000,
+        timeout: 45000,
       });
 
       // API returns data.data as an array (v1) or data.data.jobs as an array (v2)
