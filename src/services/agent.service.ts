@@ -22,21 +22,6 @@ import { logger } from '../utils/logger';
 // No hardcoded rules like "if relevance_score > 75 then auto-flag".
 // Claude decides. Agent learns and improves over time.
 
-function determineLocationCategory(location?: string): 'remote' | 'washington' | 'other' {
-  if (!location) return 'other';
-  const l = location.toLowerCase();
-  if (l.includes('remote')) return 'remote';
-  if (
-    l.includes('washington') ||
-    l.includes('seattle') ||
-    l.includes('bellevue') ||
-    l.includes('redmond') ||
-    l.includes(', wa')
-  )
-    return 'washington';
-  return 'other';
-}
-
 function extractJson<T>(text: string): T {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No JSON object found in Claude response');
@@ -72,9 +57,13 @@ export class AutonomousAgent {
     logger.info('Agent assessed strategy', { strategy: strategy.slice(0, 120) });
 
     // Step 4: FETCH — get new jobs (implemented in Phase 4)
-    const jobs = await this.fetchJobs();
+    const fetched = await this.fetchJobs();
+    logger.info(`Fetched ${fetched.length} new jobs`);
+
+    // Step 4b: SELECT — apply per-location caps before analysis
+    const jobs = this.selectJobsForAnalysis(fetched);
     context.jobsToAnalyze = jobs;
-    logger.info(`Fetched ${jobs.length} new jobs`);
+    logger.info(`Selected ${jobs.length}/${fetched.length} jobs for analysis`);
 
     // Step 5: ANALYZE — Claude scores each job against the full context
     const analyses = await this.analyzeJobs(jobs, context);
@@ -144,8 +133,36 @@ Be concise (2-3 sentences).`;
     return this.jobAggregator.fetchAndStoreJobs(criteria);
   }
 
+  selectJobsForAnalysis(jobs: Job[]): Job[] {
+    const caps = this.tokenBudget.locationCaps(this.config.locationPriority);
+    if (caps.size === 0) return jobs.slice(0, this.tokenBudget.maxJobsPerRun);
+
+    logger.info('Location caps for this run', Object.fromEntries(caps));
+
+    const counts = new Map<string, number>();
+    const selected: Job[] = [];
+
+    for (const job of jobs) {
+      const loc = job.locationCategory ?? 'other';
+      const cap = caps.get(loc) ?? 0;
+      const count = counts.get(loc) ?? 0;
+      if (count < cap) {
+        selected.push(job);
+        counts.set(loc, count + 1);
+      }
+      if (selected.length >= this.tokenBudget.maxJobsPerRun) break;
+    }
+
+    return selected;
+  }
+
   async analyzeJobs(jobs: Job[], context: RunningAgentContext): Promise<JobAnalysis[]> {
+    const capped = jobs.slice(0, this.tokenBudget.maxJobsPerRun);
+    if (capped.length < jobs.length) {
+      logger.warn(`Job cap applied: analyzing ${capped.length} of ${jobs.length} fetched jobs`);
+    }
     const analyses: JobAnalysis[] = [];
+    jobs = capped;
     for (const job of jobs) {
       try {
         let analysis: JobAnalysis;
@@ -245,7 +262,7 @@ Respond with ONLY valid JSON (no markdown):
 {
   "relevance_score": <number 0-100>,
   "interview_chance": <number 0-100>,
-  "location_category": "remote" | "washington" | "other",
+  "location_category": ${this.config.locationPriority.map((l) => `"${l}"`).join(' | ')},
   "overall_category": "auto-flag" | "needs-review" | "skip",
   "relevance_reasoning": "<one sentence>",
   "insights": "<one sentence>",
@@ -273,7 +290,7 @@ Respond with ONLY valid JSON (no markdown):
       company: job.company,
       relevance_score: raw.relevance_score,
       interview_chance: raw.interview_chance,
-      location_category: raw.location_category ?? determineLocationCategory(job.location),
+      location_category: raw.location_category ?? job.locationCategory ?? 'other',
       overall_category: raw.overall_category,
       relevance_reasoning: raw.relevance_reasoning,
       insights: raw.insights,

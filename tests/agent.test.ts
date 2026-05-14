@@ -96,6 +96,35 @@ describe('TokenBudgetService', () => {
     expect(output).toContain('buffer remaining');
     spy.mockRestore();
   });
+
+  it('locationCaps() distributes 30 jobs across 3 priorities as 15/10/5', () => {
+    const budget = new TokenBudgetService();
+    const caps = budget.locationCaps(['remote', 'washington', 'other']);
+    expect(caps.get('remote')).toBe(15);
+    expect(caps.get('washington')).toBe(10);
+    expect(caps.get('other')).toBe(5);
+    const total = [...caps.values()].reduce((a, b) => a + b, 0);
+    expect(total).toBe(30);
+  });
+
+  it('locationCaps() distributes 30 jobs across 2 priorities as 20/10', () => {
+    const budget = new TokenBudgetService();
+    const caps = budget.locationCaps(['remote', 'washington']);
+    expect(caps.get('remote')).toBe(20);
+    expect(caps.get('washington')).toBe(10);
+    expect([...caps.values()].reduce((a, b) => a + b, 0)).toBe(30);
+  });
+
+  it('locationCaps() assigns all 30 slots to a single priority', () => {
+    const budget = new TokenBudgetService();
+    const caps = budget.locationCaps(['remote']);
+    expect(caps.get('remote')).toBe(30);
+  });
+
+  it('locationCaps() returns an empty map for an empty priority list', () => {
+    const budget = new TokenBudgetService();
+    expect(budget.locationCaps([]).size).toBe(0);
+  });
 });
 
 // ── ClaudeService ─────────────────────────────────────────────────────────────
@@ -238,5 +267,52 @@ describe('AutonomousAgent', () => {
     const agent = makeAgent();
     const patterns = await agent.learnPatterns([], []);
     expect(patterns).toHaveLength(0);
+  });
+
+  it('selectJobsForAnalysis() respects per-location caps and total cap', () => {
+    // fakeConfig has locationPriority: ['remote', 'washington']
+    // 2 priorities → caps: remote=20, washington=10
+    const agent = makeAgent();
+    const jobs = [
+      ...Array.from({ length: 25 }, (_, i) =>
+        makeJob({ id: `r${i}`, externalId: `r${i}`, locationCategory: 'remote' }),
+      ),
+      ...Array.from({ length: 15 }, (_, i) =>
+        makeJob({ id: `w${i}`, externalId: `w${i}`, locationCategory: 'washington' }),
+      ),
+    ];
+
+    const selected = agent.selectJobsForAnalysis(jobs);
+
+    const remoteCount = selected.filter((j) => j.locationCategory === 'remote').length;
+    const washingtonCount = selected.filter((j) => j.locationCategory === 'washington').length;
+
+    // Supply exceeds caps in both locations, so we should hit the caps exactly
+    expect(selected.length).toBe(30);
+    expect(remoteCount).toBe(20);
+    expect(washingtonCount).toBe(10);
+  });
+
+  it('selectJobsForAnalysis() takes all available jobs when supply is below cap', () => {
+    const agent = makeAgent();
+    const jobs = [
+      makeJob({ id: 'r1', externalId: 'r1', locationCategory: 'remote' }),
+      makeJob({ id: 'w1', externalId: 'w1', locationCategory: 'washington' }),
+    ];
+
+    const selected = agent.selectJobsForAnalysis(jobs);
+    expect(selected).toHaveLength(2);
+  });
+
+  it('selectJobsForAnalysis() excludes jobs whose location is not in locationPriority', () => {
+    const agent = makeAgent();
+    const jobs = [
+      makeJob({ id: 'r1', externalId: 'r1', locationCategory: 'remote' }),
+      makeJob({ id: 'o1', externalId: 'o1', locationCategory: 'other' }),
+    ];
+
+    // fakeConfig locationPriority = ['remote', 'washington'] — 'other' gets cap 0
+    const selected = agent.selectJobsForAnalysis(jobs);
+    expect(selected.every((j) => j.locationCategory !== 'other')).toBe(true);
   });
 });
