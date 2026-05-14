@@ -88,6 +88,7 @@ async function main(): Promise<void> {
       jobAggregator,
       claudeAnalysisService,
       claudeAnalysisRepository,
+      jobRepository,
     );
 
     // Expose agent for programmatic access (e.g. scheduler, tests)

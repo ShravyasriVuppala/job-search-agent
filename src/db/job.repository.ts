@@ -56,6 +56,21 @@ export class JobRepository {
     return result.rows.map(mapRow);
   }
 
+  // Returns jobs (with DB ids) whose apply_url is in the given list
+  // AND that have no non-stale claude_analysis record yet.
+  async getUnanalyzedJobs(applyUrls: string[]): Promise<Job[]> {
+    if (applyUrls.length === 0) return [];
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT j.* FROM jobs j
+       LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
+       WHERE j.apply_url = ANY($1)
+       AND ca.id IS NULL`,
+      [applyUrls],
+    );
+    return result.rows.map(mapRow);
+  }
+
   async getJobsByLocationCategory(category: string): Promise<Job[]> {
     const pool = getPool();
     const result = await pool.query(

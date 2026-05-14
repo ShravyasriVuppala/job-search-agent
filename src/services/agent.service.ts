@@ -5,6 +5,7 @@ import { JobAggregatorService } from './job-aggregator.service';
 import { ClaudeAnalysisService } from './claude-analysis.service';
 import { ResumeRepository } from '../db/resume.repository';
 import { AgentMemoryRepository } from '../db/agent-memory.repository';
+import { JobRepository } from '../db/job.repository';
 import { ClaudeAnalysisRepository } from '../db/claude-analysis.repository';
 import { agentContext } from '../agent/context';
 import { logger } from '../utils/logger';
@@ -38,6 +39,7 @@ export class AutonomousAgent {
     private readonly jobAggregator?: JobAggregatorService,
     private readonly claudeAnalysisService?: ClaudeAnalysisService,
     private readonly claudeAnalysisRepository?: ClaudeAnalysisRepository,
+    private readonly jobRepository?: JobRepository,
   ) {}
 
   async runDailyLoop(): Promise<void> {
@@ -56,14 +58,18 @@ export class AutonomousAgent {
     context.currentStrategy = strategy;
     logger.info('Agent assessed strategy', { strategy: strategy.slice(0, 120) });
 
-    // Step 4: FETCH — get new jobs (implemented in Phase 4)
+    // Step 4: FETCH — get new jobs
     const fetched = await this.fetchJobs();
-    logger.info(`Fetched ${fetched.length} new jobs`);
+    logger.info(`Fetched ${fetched.length} jobs from APIs`);
+
+    // Step 4a: FILTER — skip jobs already analyzed (avoids re-spending Claude tokens)
+    const newJobs = await this.filterUnanalyzed(fetched);
+    logger.info(`New (unanalyzed) jobs: ${newJobs.length}/${fetched.length}`);
 
     // Step 4b: SELECT — apply per-location caps before analysis
-    const jobs = this.selectJobsForAnalysis(fetched);
+    const jobs = this.selectJobsForAnalysis(newJobs);
     context.jobsToAnalyze = jobs;
-    logger.info(`Selected ${jobs.length}/${fetched.length} jobs for analysis`);
+    logger.info(`Selected ${jobs.length}/${newJobs.length} jobs for analysis`);
 
     // Step 5: ANALYZE — Claude scores each job against the full context
     const analyses = await this.analyzeJobs(jobs, context);
@@ -132,6 +138,16 @@ Be concise (2-3 sentences).`;
       locationKeywords: this.config.locationKeywords,
     };
     return this.jobAggregator.fetchAndStoreJobs(criteria);
+  }
+
+  async filterUnanalyzed(jobs: Job[]): Promise<Job[]> {
+    if (!this.jobRepository || jobs.length === 0) return jobs;
+    const applyUrls = jobs.map((j) => j.applyUrl).filter(Boolean);
+    const unanalyzed = await this.jobRepository.getUnanalyzedJobs(applyUrls);
+    const unanalyzedUrls = new Set(unanalyzed.map((j) => j.applyUrl));
+    // Return the DB records (which have ids) for unanalyzed jobs,
+    // preserving the order from the original fetch.
+    return unanalyzed.filter((j) => unanalyzedUrls.has(j.applyUrl));
   }
 
   selectJobsForAnalysis(jobs: Job[]): Job[] {

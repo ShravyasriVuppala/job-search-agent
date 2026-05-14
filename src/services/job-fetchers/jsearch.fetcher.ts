@@ -10,7 +10,7 @@ export class JSearchFetcher implements JobFetcher {
       const response = await axios.get('https://jsearch.p.rapidapi.com/search-v2', {
         params: {
           query: criteria.jobTitles.join(' OR '),
-          num_pages: '1',
+          num_pages: '5',
           date_posted: 'month',
           job_title: criteria.jobTitles.join(','),
           country: 'us',
