@@ -34,11 +34,18 @@ function axiosError(status: number, message = 'Axios error') {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const locationKeywords = {
+  remote: ['remote'],
+  washington: ['seattle', 'bellevue', 'tacoma', 'redmond', 'renton', 'kirkland', 'sammamish', 'auburn', 'kent', 'des moines', 'washington', '- wa'],
+  other: [] as string[],
+};
+
 const criteria: SearchCriteria = {
   jobTitles: ['Senior Software Engineer', 'Staff Software Engineer'],
   locationPriority: ['remote', 'washington'],
   yearsExperience: 7,
   preferredStack: ['java', 'spring boot', 'kafka'],
+  locationKeywords,
 };
 
 // ── JSearchFetcher ────────────────────────────────────────────────────────────
@@ -76,6 +83,112 @@ describe('JSearchFetcher', () => {
     expect(jobs[0].salaryMin).toBe(150000);
     expect(jobs[0].applyUrl).toBe('https://stripe.com/jobs/1');
     expect(jobs[0].isActive).toBe(true);
+  });
+
+  it('parses recruiter and company fields when present in JSearch response', async () => {
+    axiosGetSpy.mockResolvedValue({
+      data: {
+        data: [
+          {
+            job_id: 'jsearch-recruiter-001',
+            job_title: 'Senior Software Engineer',
+            employer_name: 'Google',
+            job_description: 'Come build at scale.',
+            job_country: 'US',
+            job_state: 'CA',
+            job_apply_link: 'https://careers.google.com/jobs/1',
+            job_posted_at_datetime_utc: '2026-05-13T00:00:00Z',
+            recruiter_name: 'John Smith',
+            recruiter_email: 'john.smith@google.com',
+            company_hiring_url: 'https://careers.google.com',
+            company_size: 'Large',
+            company_website: 'https://google.com',
+          },
+        ],
+      },
+    });
+
+    const fetcher = new JSearchFetcher('test-api-key');
+    const jobs = await fetcher.fetch(criteria);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].recruiterName).toBe('John Smith');
+    expect(jobs[0].recruiterEmail).toBe('john.smith@google.com');
+    expect(jobs[0].companyHiringUrl).toBe('https://careers.google.com');
+    expect(jobs[0].companySize).toBe('Large');
+    expect(jobs[0].companyWebsite).toBe('https://google.com');
+  });
+
+  it('stores undefined for recruiter fields absent from JSearch response', async () => {
+    axiosGetSpy.mockResolvedValue({
+      data: {
+        data: [
+          {
+            job_id: 'jsearch-no-recruiter',
+            job_title: 'Senior Software Engineer',
+            employer_name: 'Stripe',
+            job_description: 'Build payments infrastructure.',
+            job_country: 'US',
+            job_state: 'CA',
+            job_apply_link: 'https://stripe.com/jobs/2',
+          },
+        ],
+      },
+    });
+
+    const fetcher = new JSearchFetcher('test-api-key');
+    const jobs = await fetcher.fetch(criteria);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].recruiterName).toBeUndefined();
+    expect(jobs[0].recruiterEmail).toBeUndefined();
+    expect(jobs[0].companyHiringUrl).toBeUndefined();
+    expect(jobs[0].companySize).toBeUndefined();
+    expect(jobs[0].companyWebsite).toBeUndefined();
+  });
+
+  it('sets locationCategory on each job using criteria.locationKeywords', async () => {
+    axiosGetSpy.mockResolvedValue({
+      data: {
+        data: [
+          {
+            job_id: 'j-remote',
+            job_title: 'SWE',
+            employer_name: 'Acme',
+            job_description: 'desc',
+            job_country: 'US',
+            job_state: 'Remote',
+            job_apply_link: 'https://acme.com/jobs/r',
+          },
+          {
+            job_id: 'j-bellevue',
+            job_title: 'SWE',
+            employer_name: 'Contoso',
+            job_description: 'desc',
+            job_country: 'US',
+            job_state: 'WA',
+            job_apply_link: 'https://contoso.com/jobs/b',
+          },
+          {
+            job_id: 'j-ny',
+            job_title: 'SWE',
+            employer_name: 'BigCo',
+            job_description: 'desc',
+            job_country: 'US',
+            job_state: 'NY',
+            job_apply_link: 'https://bigco.com/jobs/n',
+          },
+        ],
+      },
+    });
+
+    const fetcher = new JSearchFetcher('test-key');
+    const jobs = await fetcher.fetch(criteria);
+
+    expect(jobs).toHaveLength(3);
+    expect(jobs.find((j) => j.externalId === 'j-remote')?.locationCategory).toBe('remote');
+    expect(jobs.find((j) => j.externalId === 'j-bellevue')?.locationCategory).toBe('washington');
+    expect(jobs.find((j) => j.externalId === 'j-ny')?.locationCategory).toBe('other');
   });
 
   it('returns [] and logs a warning on 429 rate limit', async () => {
@@ -260,14 +373,42 @@ describe('JobAggregatorService', () => {
     expect(jobs).toHaveLength(1);
   });
 
-  it('categorizes remote, washington, and other locations correctly', () => {
+  it('categorizes locations correctly using config keywords', () => {
+    const aggregator = makeAggregator([]);
+    const kw = locationKeywords;
+
+    // Remote
+    expect(aggregator.categorizeLocation('Remote', kw)).toBe('remote');
+    expect(aggregator.categorizeLocation('Work from home, remote', kw)).toBe('remote');
+    expect(aggregator.categorizeLocation('REMOTE', kw)).toBe('remote');
+
+    // Washington — major cities
+    expect(aggregator.categorizeLocation('Seattle, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Bellevue, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Bellevue, Washington', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Tacoma, Washington', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Redmond, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Kirkland, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Renton, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Sammamish, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Auburn, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('Kent, WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('US - WA', kw)).toBe('washington');
+    expect(aggregator.categorizeLocation('SEATTLE', kw)).toBe('washington');
+
+    // Other
+    expect(aggregator.categorizeLocation('San Francisco, CA', kw)).toBe('other');
+    expect(aggregator.categorizeLocation('New York, NY', kw)).toBe('other');
+    expect(aggregator.categorizeLocation('Denver, CO', kw)).toBe('other');
+    expect(aggregator.categorizeLocation('Austin, TX', kw)).toBe('other');
+    expect(aggregator.categorizeLocation(undefined, kw)).toBe('other');
+  });
+
+  it('falls back to built-in defaults when no locationKeywords provided', () => {
     const aggregator = makeAggregator([]);
     expect(aggregator.categorizeLocation('Remote')).toBe('remote');
-    expect(aggregator.categorizeLocation('Work from home, remote')).toBe('remote');
     expect(aggregator.categorizeLocation('Seattle, WA')).toBe('washington');
-    expect(aggregator.categorizeLocation('Bellevue, Washington')).toBe('washington');
     expect(aggregator.categorizeLocation('New York, NY')).toBe('other');
-    expect(aggregator.categorizeLocation(undefined)).toBe('other');
   });
 
   it('continues fetching from other sources when one fetcher throws', async () => {

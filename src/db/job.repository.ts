@@ -12,8 +12,10 @@ export class JobRepository {
             source, external_id, title, company, description,
             location, location_category,
             salary_min, salary_max, salary_currency,
-            apply_url, posted_at, is_active
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            apply_url, posted_at, is_active,
+            recruiter_name, recruiter_email,
+            company_hiring_url, company_size, company_website
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
           ON CONFLICT (source, external_id) DO NOTHING`,
           [
             job.source,
@@ -29,6 +31,11 @@ export class JobRepository {
             job.applyUrl,
             job.postedAt ?? null,
             job.isActive,
+            job.recruiterName ?? null,
+            job.recruiterEmail ?? null,
+            job.companyHiringUrl ?? null,
+            job.companySize ?? null,
+            job.companyWebsite ?? null,
           ],
         );
       } catch (err: unknown) {
@@ -76,6 +83,11 @@ function mapRow(row: Record<string, unknown>): Job {
     postedAt: row.posted_at as Date | undefined,
     fetchedAt: row.fetched_at as Date | undefined,
     isActive: row.is_active as boolean,
+    recruiterName: row.recruiter_name as string | undefined,
+    recruiterEmail: row.recruiter_email as string | undefined,
+    companyHiringUrl: row.company_hiring_url as string | undefined,
+    companySize: row.company_size as string | undefined,
+    companyWebsite: row.company_website as string | undefined,
     createdAt: row.created_at as Date | undefined,
     updatedAt: row.updated_at as Date | undefined,
   };

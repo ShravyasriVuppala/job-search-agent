@@ -81,6 +81,11 @@ export interface JobWithAnalysis {
   locationCategory?: string;
   applyUrl: string;
   source: string;
+  recruiterName?: string;
+  recruiterEmail?: string;
+  companyHiringUrl?: string;
+  companySize?: string;
+  companyWebsite?: string;
   relevanceScore: number;
   interviewChance: number;
   overallCategory: string;
@@ -99,6 +104,11 @@ export interface AnalysisWithJob {
     location?: string;
     applyUrl: string;
     source: string;
+    recruiterName?: string;
+    recruiterEmail?: string;
+    companyHiringUrl?: string;
+    companySize?: string;
+    companyWebsite?: string;
   };
   analysis: {
     id: string;
@@ -120,6 +130,8 @@ export class ClaudeAnalysisQueryRepository {
       `SELECT
          j.id AS job_id, j.title, j.company, j.location,
          j.location_category, j.apply_url, j.source,
+         j.recruiter_name, j.recruiter_email,
+         j.company_hiring_url, j.company_size, j.company_website,
          ca.relevance_score, ca.interview_chance, ca.overall_category,
          ca.relevance_reasoning, ca.insights, ca.matched_patterns,
          ca.cover_letter_draft, ca.analyzed_at
@@ -138,6 +150,8 @@ export class ClaudeAnalysisQueryRepository {
       `SELECT
          j.id AS job_id, j.title, j.company, j.location,
          j.location_category, j.apply_url, j.source,
+         j.recruiter_name, j.recruiter_email,
+         j.company_hiring_url, j.company_size, j.company_website,
          ca.relevance_score, ca.interview_chance, ca.overall_category,
          ca.relevance_reasoning, ca.insights, ca.matched_patterns,
          ca.cover_letter_draft, ca.analyzed_at
@@ -156,6 +170,8 @@ export class ClaudeAnalysisQueryRepository {
       pool.query<Record<string, unknown>>(
         `SELECT
            j.id AS job_id, j.title, j.company, j.location, j.apply_url, j.source,
+           j.recruiter_name, j.recruiter_email,
+           j.company_hiring_url, j.company_size, j.company_website,
            ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
            ca.overall_category, ca.relevance_reasoning, ca.insights,
            ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
@@ -177,6 +193,11 @@ export class ClaudeAnalysisQueryRepository {
         location: row.location as string | undefined,
         applyUrl: row.apply_url as string,
         source: row.source as string,
+        recruiterName: row.recruiter_name as string | undefined,
+        recruiterEmail: row.recruiter_email as string | undefined,
+        companyHiringUrl: row.company_hiring_url as string | undefined,
+        companySize: row.company_size as string | undefined,
+        companyWebsite: row.company_website as string | undefined,
       },
       analysis: {
         id: row.analysis_id as string,
@@ -199,6 +220,8 @@ export class ClaudeAnalysisQueryRepository {
     const result = await pool.query<Record<string, unknown>>(
       `SELECT
          j.id AS job_id, j.title, j.company, j.location, j.apply_url, j.source,
+         j.recruiter_name, j.recruiter_email,
+         j.company_hiring_url, j.company_size, j.company_website,
          ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
          ca.overall_category, ca.relevance_reasoning, ca.insights,
          ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
@@ -217,6 +240,11 @@ export class ClaudeAnalysisQueryRepository {
         location: row.location as string | undefined,
         applyUrl: row.apply_url as string,
         source: row.source as string,
+        recruiterName: row.recruiter_name as string | undefined,
+        recruiterEmail: row.recruiter_email as string | undefined,
+        companyHiringUrl: row.company_hiring_url as string | undefined,
+        companySize: row.company_size as string | undefined,
+        companyWebsite: row.company_website as string | undefined,
       },
       analysis: {
         id: row.analysis_id as string,
@@ -242,6 +270,11 @@ function mapJoinRow(row: Record<string, unknown>): JobWithAnalysis {
     locationCategory: row.location_category as string | undefined,
     applyUrl: row.apply_url as string,
     source: row.source as string,
+    recruiterName: row.recruiter_name as string | undefined,
+    recruiterEmail: row.recruiter_email as string | undefined,
+    companyHiringUrl: row.company_hiring_url as string | undefined,
+    companySize: row.company_size as string | undefined,
+    companyWebsite: row.company_website as string | undefined,
     relevanceScore: parseFloat(row.relevance_score as string),
     interviewChance: parseFloat(row.interview_chance as string),
     overallCategory: row.overall_category as string,

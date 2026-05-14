@@ -54,9 +54,24 @@ CREATE TABLE IF NOT EXISTS jobs (
   posted_at        TIMESTAMP,
   fetched_at       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   is_active        BOOLEAN     NOT NULL DEFAULT TRUE,
+
+  -- Recruiter / company info (from JSearch API, all nullable)
+  recruiter_name   VARCHAR(255),
+  recruiter_email  VARCHAR(255),
+  company_hiring_url TEXT,
+  company_size     VARCHAR(50),
+  company_website  VARCHAR(255),
+
   created_at       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- For existing databases, run:
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_name VARCHAR(255);
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_email VARCHAR(255);
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_hiring_url TEXT;
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_size VARCHAR(50);
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_website VARCHAR(255);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_source_external_id
   ON jobs (source, external_id);

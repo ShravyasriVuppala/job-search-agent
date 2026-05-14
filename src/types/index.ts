@@ -22,6 +22,11 @@ export interface Config {
   nodeEnv: string;
   jobTitles: string[];
   locationPriority: string[];
+  locationKeywords: {
+    remote: string[];
+    washington: string[];
+    other: string[];
+  };
   yearsExperience: number;
   preferredCompanyStage: string[];
   excludeKeywords: string[];
@@ -77,6 +82,11 @@ export interface Job {
   postedAt?: Date;
   fetchedAt?: Date;
   isActive: boolean;
+  recruiterName?: string;
+  recruiterEmail?: string;
+  companyHiringUrl?: string;
+  companySize?: string;
+  companyWebsite?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -180,11 +190,18 @@ export interface RunningAgentContext {
   analyses: JobAnalysis[];
 }
 
+export interface LocationKeywords {
+  remote: string[];
+  washington: string[];
+  other: string[];
+}
+
 export interface SearchCriteria {
   jobTitles: string[];
   locationPriority: string[];
   yearsExperience: number;
   preferredStack: string[];
+  locationKeywords?: LocationKeywords;
 }
 
 export interface JobFetcher {
