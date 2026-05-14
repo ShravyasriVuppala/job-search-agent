@@ -126,6 +126,16 @@ export function validateAndLoadConfig(): Config {
     locationPriority: parseCommaSeparated(
       optionalEnv('LOCATION_PRIORITY', 'remote,washington,other'),
     ),
+    locationKeywords: {
+      remote: parseCommaSeparated(optionalEnv('LOCATION_KEYWORDS_REMOTE', 'remote')),
+      washington: parseCommaSeparated(
+        optionalEnv(
+          'LOCATION_KEYWORDS_WASHINGTON',
+          'seattle,bellevue,tacoma,redmond,renton,kirkland,sammamish,auburn,kent,des moines,washington,- wa',
+        ),
+      ),
+      other: parseCommaSeparated(optionalEnv('LOCATION_KEYWORDS_OTHER', '')),
+    },
     yearsExperience,
     preferredCompanyStage: parseCommaSeparated(
       optionalEnv('PREFERRED_COMPANY_STAGE', ''),

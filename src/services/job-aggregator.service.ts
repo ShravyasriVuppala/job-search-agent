@@ -1,4 +1,4 @@
-import { Job, JobFetcher, SearchCriteria } from '../types';
+import { Job, JobFetcher, LocationKeywords, SearchCriteria } from '../types';
 import { JobRepository } from '../db/job.repository';
 import { logger } from '../utils/logger';
 
@@ -41,11 +41,11 @@ export class JobAggregatorService {
     const uniqueJobs = Array.from(deduped.values());
     logger.info(`Deduped: ${allJobs.length} jobs → ${uniqueJobs.length} unique`);
 
-    // Simple regex categorization (Phase 4).
-    // Phase 5: Claude refines location categorization using full job context.
-    // For now: 'remote', 'washington', 'other' good enough.
+    // Categorize jobs that weren't already tagged by their fetcher.
     for (const job of uniqueJobs) {
-      job.locationCategory = this.categorizeLocation(job.location);
+      if (!job.locationCategory) {
+        job.locationCategory = this.categorizeLocation(job.location, criteria.locationKeywords);
+      }
     }
 
     // Jobs fetched fresh daily (8 AM).
@@ -58,19 +58,17 @@ export class JobAggregatorService {
     return uniqueJobs;
   }
 
-  categorizeLocation(location?: string): string {
+  categorizeLocation(location?: string, locationKeywords?: LocationKeywords): string {
     if (!location) return 'other';
-    const l = location.toLowerCase();
-    if (l.includes('remote')) return 'remote';
-    if (
-      l.includes('washington') ||
-      l.includes('seattle') ||
-      l.includes('bellevue') ||
-      l.includes('redmond') ||
-      l.includes(', wa') ||
-      l.includes(' wa ')
-    )
-      return 'washington';
+    const loc = location.toLowerCase();
+    const kw: LocationKeywords = locationKeywords ?? {
+      remote: ['remote'],
+      washington: ['washington', 'seattle', '- wa'],
+      other: [],
+    };
+    if (kw.remote.some((k) => loc.includes(k))) return 'remote';
+    if (kw.washington.some((k) => loc.includes(k))) return 'washington';
+    if (kw.other.length > 0 && kw.other.some((k) => loc.includes(k))) return 'other';
     return 'other';
   }
 }

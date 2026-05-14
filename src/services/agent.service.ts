@@ -129,6 +129,7 @@ Be concise (2-3 sentences).`;
       locationPriority: this.config.locationPriority,
       yearsExperience: this.config.yearsExperience,
       preferredStack: this.config.preferredTechnicalStack,
+      locationKeywords: this.config.locationKeywords,
     };
     return this.jobAggregator.fetchAndStoreJobs(criteria);
   }
