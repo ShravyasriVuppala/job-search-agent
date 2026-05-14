@@ -72,6 +72,9 @@ export interface Application {
   jobId: string;
   status: ApplicationStatus;
   appliedAt: string;
+  title?: string;
+  company?: string;
+  location?: string;
   coverLetterUsed?: string;
   userNotes?: string;
 }

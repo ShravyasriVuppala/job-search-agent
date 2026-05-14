@@ -81,10 +81,11 @@ export function Applications() {
               <div className="flex-1 min-w-0">
                 <button
                   onClick={() => navigate(`/job/${app.jobId}`)}
-                  className="text-sm font-medium text-blue-600 hover:underline truncate"
+                  className="text-sm font-semibold text-gray-900 hover:text-blue-600 truncate block"
                 >
-                  View job details
+                  {app.title ?? 'View job details'}
                 </button>
+                <p className="text-xs text-gray-500 truncate">{app.company ?? '—'}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
                   Applied {new Date(app.appliedAt).toLocaleDateString()}
                 </p>
