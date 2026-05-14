@@ -102,6 +102,8 @@ export interface AnalysisWithJob {
     title: string;
     company: string;
     location?: string;
+    locationCategory?: string;
+    description?: string;
     applyUrl: string;
     source: string;
     recruiterName?: string;
@@ -169,7 +171,8 @@ export class ClaudeAnalysisQueryRepository {
     const [dataResult, countResult] = await Promise.all([
       pool.query<Record<string, unknown>>(
         `SELECT
-           j.id AS job_id, j.title, j.company, j.location, j.apply_url, j.source,
+           j.id AS job_id, j.title, j.company, j.location, j.location_category,
+           j.apply_url, j.source,
            j.recruiter_name, j.recruiter_email,
            j.company_hiring_url, j.company_size, j.company_website,
            ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
@@ -191,6 +194,7 @@ export class ClaudeAnalysisQueryRepository {
         title: row.title as string,
         company: row.company as string,
         location: row.location as string | undefined,
+        locationCategory: row.location_category as string | undefined,
         applyUrl: row.apply_url as string,
         source: row.source as string,
         recruiterName: row.recruiter_name as string | undefined,
@@ -219,7 +223,8 @@ export class ClaudeAnalysisQueryRepository {
     const pool = getPool();
     const result = await pool.query<Record<string, unknown>>(
       `SELECT
-         j.id AS job_id, j.title, j.company, j.location, j.apply_url, j.source,
+         j.id AS job_id, j.title, j.company, j.location, j.location_category,
+         j.description, j.apply_url, j.source,
          j.recruiter_name, j.recruiter_email,
          j.company_hiring_url, j.company_size, j.company_website,
          ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
@@ -238,6 +243,8 @@ export class ClaudeAnalysisQueryRepository {
         title: row.title as string,
         company: row.company as string,
         location: row.location as string | undefined,
+        locationCategory: row.location_category as string | undefined,
+        description: row.description as string | undefined,
         applyUrl: row.apply_url as string,
         source: row.source as string,
         recruiterName: row.recruiter_name as string | undefined,
