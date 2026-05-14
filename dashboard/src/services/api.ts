@@ -91,6 +91,25 @@ export async function getAllJobs(limit = 200): Promise<RawJob[] | null> {
   return data.jobs ?? [];
 }
 
+export async function getSavedJobs(limit = 200): Promise<RawJob[] | null> {
+  const data = await request<{ jobs: RawJob[] }>(`/jobs/saved?limit=${limit}`);
+  if (data === null) return null;
+  return data.jobs ?? [];
+}
+
+export async function setJobInteraction(
+  jobId: string,
+  type: 'saved' | 'not_interested',
+  active: boolean,
+): Promise<boolean> {
+  const result = await request<{ success: boolean }>(`/interactions/${jobId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, active }),
+  });
+  return result !== null;
+}
+
 export async function getJobsByLocation(category: string): Promise<JobWithAnalysis[]> {
   const data = await request<{ jobs: FlatJobWithAnalysis[] }>(`/jobs/by-location?category=${category}`);
   return (data?.jobs ?? []).map(flatToNested);

@@ -13,6 +13,13 @@ export function createJobsRouter(locationPriority: string[]): Router {
     res.json({ success: true, data: { jobs: rows }, count: total });
   });
 
+  router.get('/saved', async (req: Request, res: Response) => {
+    const limit = Math.min(parseInt(String(req.query['limit'] ?? ''), 10) || 200, 500);
+    const offset = parseInt(String(req.query['offset'] ?? ''), 10) || 0;
+    const { rows, total } = await queryRepo.getSavedJobs(limit, offset);
+    res.json({ success: true, data: { jobs: rows }, count: total });
+  });
+
   router.get('/auto-flagged', async (_req: Request, res: Response) => {
     const jobs = await queryRepo.getJobsWithAnalysis('auto-flag');
     res.json({ success: true, data: { jobs }, count: jobs.length });

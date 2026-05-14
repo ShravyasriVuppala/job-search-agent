@@ -12,6 +12,8 @@ export interface Job {
   companyHiringUrl?: string;
   companySize?: string;
   companyWebsite?: string;
+  isSaved?: boolean;
+  isNotInterested?: boolean;
 }
 
 export interface Analysis {
@@ -51,6 +53,8 @@ export interface RawJob {
   interviewChance?: number;
   overallCategory?: string;
   analyzedAt?: string;
+  isSaved: boolean;
+  isNotInterested: boolean;
 }
 
 export interface Patterns {

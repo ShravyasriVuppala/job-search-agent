@@ -127,7 +127,7 @@ export interface AnalysisWithJob {
 
 // Used only by getJobWithOptionalAnalysis (LEFT JOIN — analysis may be absent)
 export interface JobDetailResult {
-  job: AnalysisWithJob['job'];
+  job: AnalysisWithJob['job'] & { isSaved: boolean; isNotInterested: boolean };
   analysis: AnalysisWithJob['analysis'] | null;
 }
 
@@ -146,6 +146,8 @@ export interface RawJobWithOptionalAnalysis {
   interviewChance?: number;
   overallCategory?: string;
   analyzedAt?: Date;
+  isSaved: boolean;
+  isNotInterested: boolean;
 }
 
 export class ClaudeAnalysisQueryRepository {
@@ -249,9 +251,13 @@ export class ClaudeAnalysisQueryRepository {
         `SELECT
            j.id, j.title, j.company, j.location, j.location_category,
            j.apply_url, j.source, j.posted_at, j.fetched_at,
-           ca.relevance_score, ca.interview_chance, ca.overall_category, ca.analyzed_at
+           ca.relevance_score, ca.interview_chance, ca.overall_category, ca.analyzed_at,
+           (ji_s.id IS NOT NULL) AS is_saved,
+           (ji_ni.id IS NOT NULL) AS is_not_interested
          FROM jobs j
          LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
+         LEFT JOIN job_interactions ji_s ON ji_s.job_id = j.id AND ji_s.interaction_type = 'saved'
+         LEFT JOIN job_interactions ji_ni ON ji_ni.job_id = j.id AND ji_ni.interaction_type = 'not_interested'
          ORDER BY j.posted_at DESC NULLS LAST
          LIMIT $1 OFFSET $2`,
         [limit, offset],
@@ -274,6 +280,53 @@ export class ClaudeAnalysisQueryRepository {
       interviewChance: row.interview_chance != null ? parseFloat(row.interview_chance as string) : undefined,
       overallCategory: row.overall_category as string | undefined,
       analyzedAt: row.analyzed_at as Date | undefined,
+      isSaved: row.is_saved as boolean,
+      isNotInterested: row.is_not_interested as boolean,
+    }));
+
+    return { rows, total: parseInt(countResult.rows[0].count, 10) };
+  }
+
+  async getSavedJobs(limit = 200, offset = 0): Promise<{ rows: RawJobWithOptionalAnalysis[]; total: number }> {
+    const pool = getPool();
+    const [dataResult, countResult] = await Promise.all([
+      pool.query<Record<string, unknown>>(
+        `SELECT
+           j.id, j.title, j.company, j.location, j.location_category,
+           j.apply_url, j.source, j.posted_at, j.fetched_at,
+           ca.relevance_score, ca.interview_chance, ca.overall_category, ca.analyzed_at,
+           TRUE AS is_saved,
+           (ji_ni.id IS NOT NULL) AS is_not_interested
+         FROM jobs j
+         JOIN job_interactions ji_s ON ji_s.job_id = j.id AND ji_s.interaction_type = 'saved'
+         LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
+         LEFT JOIN job_interactions ji_ni ON ji_ni.job_id = j.id AND ji_ni.interaction_type = 'not_interested'
+         ORDER BY ji_s.created_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      ),
+      pool.query<{ count: string }>(
+        `SELECT COUNT(*) FROM job_interactions WHERE interaction_type = 'saved'`,
+      ),
+    ]);
+
+    const rows = dataResult.rows.map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      company: row.company as string,
+      location: row.location as string | undefined,
+      locationCategory: row.location_category as string | undefined,
+      applyUrl: row.apply_url as string,
+      source: row.source as string,
+      postedAt: row.posted_at as Date | undefined,
+      fetchedAt: row.fetched_at as Date | undefined,
+      isAnalyzed: row.overall_category != null,
+      relevanceScore: row.relevance_score != null ? parseFloat(row.relevance_score as string) : undefined,
+      interviewChance: row.interview_chance != null ? parseFloat(row.interview_chance as string) : undefined,
+      overallCategory: row.overall_category as string | undefined,
+      analyzedAt: row.analyzed_at as Date | undefined,
+      isSaved: true,
+      isNotInterested: row.is_not_interested as boolean,
     }));
 
     return { rows, total: parseInt(countResult.rows[0].count, 10) };
@@ -289,9 +342,13 @@ export class ClaudeAnalysisQueryRepository {
          j.company_hiring_url, j.company_size, j.company_website,
          ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
          ca.overall_category, ca.relevance_reasoning, ca.insights,
-         ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
+         ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at,
+         (ji_s.id IS NOT NULL) AS is_saved,
+         (ji_ni.id IS NOT NULL) AS is_not_interested
        FROM jobs j
        LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
+       LEFT JOIN job_interactions ji_s ON ji_s.job_id = j.id AND ji_s.interaction_type = 'saved'
+       LEFT JOIN job_interactions ji_ni ON ji_ni.job_id = j.id AND ji_ni.interaction_type = 'not_interested'
        WHERE j.id = $1`,
       [jobId],
     );
@@ -313,6 +370,8 @@ export class ClaudeAnalysisQueryRepository {
         companyHiringUrl: row.company_hiring_url as string | undefined,
         companySize: row.company_size as string | undefined,
         companyWebsite: row.company_website as string | undefined,
+        isSaved: row.is_saved as boolean,
+        isNotInterested: row.is_not_interested as boolean,
       },
       analysis: hasAnalysis
         ? {
