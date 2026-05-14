@@ -65,7 +65,8 @@ export class JobRepository {
       `SELECT j.* FROM jobs j
        LEFT JOIN claude_analysis ca ON ca.job_id = j.id AND ca.is_stale = FALSE
        WHERE j.apply_url = ANY($1)
-       AND ca.id IS NULL`,
+       AND ca.id IS NULL
+       ORDER BY j.posted_at DESC NULLS LAST`,
       [applyUrls],
     );
     return result.rows.map(mapRow);

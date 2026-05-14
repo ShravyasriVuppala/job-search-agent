@@ -154,32 +154,44 @@ Be concise (2-3 sentences).`;
     const caps = this.tokenBudget.locationCaps(this.config.locationPriority);
     if (caps.size === 0) return jobs.slice(0, this.tokenBudget.maxJobsPerRun);
 
-    logger.info('Location caps for this run', Object.fromEntries(caps));
-
+    // Pass 1: fill each category up to its cap; collect overflow for redistribution
     const counts = new Map<string, number>();
     const selected: Job[] = [];
+    const overflow: Job[] = [];
 
     for (const job of jobs) {
+      if (selected.length >= this.tokenBudget.maxJobsPerRun) break;
       const loc = job.locationCategory ?? 'other';
       const cap = caps.get(loc) ?? 0;
       const count = counts.get(loc) ?? 0;
       if (count < cap) {
         selected.push(job);
         counts.set(loc, count + 1);
+      } else {
+        overflow.push(job);
       }
-      if (selected.length >= this.tokenBudget.maxJobsPerRun) break;
+    }
+
+    logger.info('Location caps for this run', Object.fromEntries(counts));
+
+    // Pass 2: redistribute unused budget — fill remaining slots from overflow in priority order
+    if (selected.length < this.tokenBudget.maxJobsPerRun && overflow.length > 0) {
+      const remaining = this.tokenBudget.maxJobsPerRun - selected.length;
+      const priorityIndex = (cat: string | undefined): number => {
+        const idx = this.config.locationPriority.indexOf(cat ?? 'other');
+        return idx === -1 ? this.config.locationPriority.length : idx;
+      };
+      overflow.sort((a, b) => priorityIndex(a.locationCategory) - priorityIndex(b.locationCategory));
+      const extras = overflow.slice(0, remaining);
+      selected.push(...extras);
+      logger.info(`Redistributed ${extras.length} overflow jobs to fill unused budget`);
     }
 
     return selected;
   }
 
   async analyzeJobs(jobs: Job[], context: RunningAgentContext): Promise<JobAnalysis[]> {
-    const capped = jobs.slice(0, this.tokenBudget.maxJobsPerRun);
-    if (capped.length < jobs.length) {
-      logger.warn(`Job cap applied: analyzing ${capped.length} of ${jobs.length} fetched jobs`);
-    }
     const analyses: JobAnalysis[] = [];
-    jobs = capped;
     for (const job of jobs) {
       try {
         let analysis: JobAnalysis;
