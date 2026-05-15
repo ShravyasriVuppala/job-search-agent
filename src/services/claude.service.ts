@@ -15,11 +15,22 @@ export class ClaudeService {
   private client: Anthropic;
   private readonly model: string;
   private readonly maxTokens: number;
+  private tokensInput = 0;
+  private tokensOutput = 0;
 
   constructor(apiKey: string, model: string, maxTokens: number) {
     this.client = new Anthropic({ apiKey });
     this.model = model;
     this.maxTokens = maxTokens;
+  }
+
+  getTokenUsage(): { input: number; output: number } {
+    return { input: this.tokensInput, output: this.tokensOutput };
+  }
+
+  resetTokenUsage(): void {
+    this.tokensInput = 0;
+    this.tokensOutput = 0;
   }
 
   // Returns the text of Claude's response. No tools — used for strategy/reasoning steps.
@@ -34,6 +45,8 @@ export class ClaudeService {
         }),
         CALL_TIMEOUT_MS,
       );
+      this.tokensInput += response.usage.input_tokens;
+      this.tokensOutput += response.usage.output_tokens;
       const text = response.content
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map((b) => b.text)
@@ -66,6 +79,8 @@ export class ClaudeService {
         }),
         CALL_TIMEOUT_MS,
       );
+      this.tokensInput += response.usage.input_tokens;
+      this.tokensOutput += response.usage.output_tokens;
       logger.info('Claude API call completed', {
         stopReason: response.stop_reason,
         contentBlocks: response.content.length,

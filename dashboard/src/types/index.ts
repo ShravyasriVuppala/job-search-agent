@@ -76,6 +76,8 @@ export interface AgentRun {
   maybeFlagged: number;
   skipped: number;
   patternsUpserted: number;
+  tokensInput: number;
+  tokensOutput: number;
   errorMessage?: string;
 }
 

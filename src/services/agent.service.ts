@@ -91,6 +91,8 @@ export class AutonomousAgent {
       await this.agentMemoryRepository.upsertAll(patterns);
 
       if (runId) {
+        const claudeTokens = this.claudeService.getTokenUsage();
+        const analysisTokens = this.claudeAnalysisService?.getTokenUsage() ?? { input: 0, output: 0 };
         await this.agentRunRepository?.completeRun(runId, {
           jobsFetched: fetched.length,
           jobsAnalyzed: analyses.length,
@@ -98,6 +100,12 @@ export class AutonomousAgent {
           maybeFlagged: analyses.filter((a) => a.overall_category === 'maybe-flag').length,
           skipped: analyses.filter((a) => a.overall_category === 'skip').length,
           patternsUpserted: patterns.length,
+          tokensInput: claudeTokens.input + analysisTokens.input,
+          tokensOutput: claudeTokens.output + analysisTokens.output,
+        });
+        logger.info('Token usage for this run', {
+          input: claudeTokens.input + analysisTokens.input,
+          output: claudeTokens.output + analysisTokens.output,
         });
       }
 
