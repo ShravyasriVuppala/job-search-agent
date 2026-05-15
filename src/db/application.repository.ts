@@ -27,6 +27,21 @@ export class ApplicationRepository {
     return result.rows.map(mapRowWithJob);
   }
 
+  async getRecentApplications(limit = 30): Promise<ApplicationWithJob[]> {
+    const pool = getPool();
+    const result = await pool.query<Record<string, unknown>>(
+      `SELECT
+         a.id, a.job_id, a.applied_at, a.status, a.created_at, a.updated_at,
+         j.title, j.company, j.location, j.apply_url
+       FROM applications a
+       JOIN jobs j ON a.job_id = j.id
+       ORDER BY a.applied_at DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return result.rows.map(mapRowWithJob);
+  }
+
   async updateApplicationStatus(
     jobId: string,
     status: ApplicationStatus,

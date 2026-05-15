@@ -139,7 +139,10 @@ Respond with ONLY valid JSON (no markdown):
     return extractJson<CoverLetterResult>(text);
   }
 
-  async learnPatterns(analyses: JobAnalysis[]): Promise<PatternLearning> {
+  async learnPatterns(
+    analyses: JobAnalysis[],
+    appliedJobs: { title: string; company: string; location?: string }[] = [],
+  ): Promise<PatternLearning> {
     const autoFlagged = analyses.filter((a) => a.overall_category === 'auto-flag').length;
     const maybeFlagged = analyses.filter((a) => a.overall_category === 'maybe-flag').length;
     const skipped = analyses.filter((a) => a.overall_category === 'skip').length;
@@ -151,8 +154,14 @@ Respond with ONLY valid JSON (no markdown):
       .map((a) => a.company)
       .join(', ');
 
-    const prompt = `Based on ${analyses.length} job analyses, identify key patterns.
+    const appliedSection = appliedJobs.length > 0
+      ? `\nUSER-APPLIED JOBS (strongest signal — user chose to apply to these):
+${appliedJobs.map((j) => `- ${j.title} at ${j.company}${j.location ? ` (${j.location})` : ''}`).join('\n')}
+Weight these heavily when identifying patterns — they represent confirmed user intent.\n`
+      : '';
 
+    const prompt = `Based on ${analyses.length} job analyses, identify key patterns.
+${appliedSection}
 RESULTS: auto-flagged=${autoFlagged}, maybe-flagged=${maybeFlagged}, skipped=${skipped}
 MATCHED PATTERNS: ${topPatterns}
 TOP COMPANIES: ${topCompanies || 'none'}
