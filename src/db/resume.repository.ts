@@ -19,7 +19,22 @@ export class ResumeRepository {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // Retire the previous current record before inserting the new one.
+
+      // If the same hash is already current, just touch last_verified_at — no new row.
+      const existing = await client.query(
+        'SELECT id FROM resume_metadata WHERE resume_hash = $1 AND is_current = TRUE',
+        [input.resume_hash],
+      );
+      if (existing.rows.length > 0) {
+        await client.query(
+          'UPDATE resume_metadata SET last_verified_at = NOW(), updated_at = NOW() WHERE id = $1',
+          [existing.rows[0].id],
+        );
+        await client.query('COMMIT');
+        return;
+      }
+
+      // Hash changed — retire old current row and insert a new one.
       await client.query(
         'UPDATE resume_metadata SET is_current = FALSE, updated_at = NOW() WHERE is_current = TRUE',
       );
