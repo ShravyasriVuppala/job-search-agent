@@ -15,6 +15,7 @@ export function Navbar() {
           <NavLink to="/all-jobs" className={linkClass}>All Jobs</NavLink>
           <NavLink to="/saved-jobs" className={linkClass}>Saved</NavLink>
           <NavLink to="/applications" className={linkClass}>Applications</NavLink>
+          <NavLink to="/runs" className={linkClass}>Run History</NavLink>
         </div>
       </div>
     </nav>

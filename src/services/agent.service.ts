@@ -8,6 +8,7 @@ import { AgentMemoryRepository } from '../db/agent-memory.repository';
 import { JobRepository } from '../db/job.repository';
 import { ClaudeAnalysisRepository } from '../db/claude-analysis.repository';
 import { ApplicationRepository } from '../db/application.repository';
+import { AgentRunRepository } from '../db/agent-run.repository';
 import { agentContext } from '../agent/context';
 import { logger } from '../utils/logger';
 
@@ -41,49 +42,71 @@ export class AutonomousAgent {
     private readonly claudeAnalysisService?: ClaudeAnalysisService,
     private readonly claudeAnalysisRepository?: ClaudeAnalysisRepository,
     private readonly jobRepository?: JobRepository,
+    private readonly agentRunRepository?: AgentRunRepository,
   ) {}
 
   async runDailyLoop(): Promise<void> {
-    // Step 1: VALIDATE TOKEN BUDGET (proactive enforcement before any API calls)
-    if (!this.tokenBudget.validate()) {
-      logger.error('Token budget exceeded. Aborting agent run.');
-      return;
+    const runId = await this.agentRunRepository?.startRun();
+
+    try {
+      // Step 1: VALIDATE TOKEN BUDGET (proactive enforcement before any API calls)
+      if (!this.tokenBudget.validate()) {
+        logger.error('Token budget exceeded. Aborting agent run.');
+        if (runId) await this.agentRunRepository?.failRun(runId, 'Token budget exceeded');
+        return;
+      }
+
+      // Step 2: OBSERVE — load resume, memory, recent applications
+      const context = await this.observe();
+      logger.info('Observed context', { resumeHash: context.resume.hash });
+
+      // Step 3: ASSESS — Claude reasons about today's strategy
+      const strategy = await this.assess(context);
+      context.currentStrategy = strategy;
+      logger.info('Agent assessed strategy', { strategy: strategy.slice(0, 120) });
+
+      // Step 4: FETCH — get new jobs
+      const fetched = await this.fetchJobs();
+      logger.info(`Fetched ${fetched.length} jobs from APIs`);
+
+      // Step 4a: FILTER — skip jobs already analyzed (avoids re-spending Claude tokens)
+      const newJobs = await this.filterUnanalyzed(fetched);
+      logger.info(`New (unanalyzed) jobs: ${newJobs.length}/${fetched.length}`);
+
+      // Step 4b: SELECT — apply per-location caps before analysis
+      const jobs = this.selectJobsForAnalysis(newJobs);
+      context.jobsToAnalyze = jobs;
+      logger.info(`Selected ${jobs.length}/${newJobs.length} jobs for analysis`);
+
+      // Step 5: ANALYZE — Claude scores each job against the full context
+      const analyses = await this.analyzeJobs(jobs, context);
+      context.analyses = analyses;
+      logger.info(`Analyzed ${analyses.length} jobs`);
+
+      // Step 6: LEARN — Claude identifies patterns from today's results
+      const patterns = await this.learnPatterns(analyses, jobs);
+      logger.info(`Identified ${patterns.length} patterns`);
+
+      // Step 7: STORE — persist results to DB
+      await this.agentMemoryRepository.upsertAll(patterns);
+
+      if (runId) {
+        await this.agentRunRepository?.completeRun(runId, {
+          jobsFetched: fetched.length,
+          jobsAnalyzed: analyses.length,
+          autoFlagged: analyses.filter((a) => a.overall_category === 'auto-flag').length,
+          maybeFlagged: analyses.filter((a) => a.overall_category === 'maybe-flag').length,
+          skipped: analyses.filter((a) => a.overall_category === 'skip').length,
+          patternsUpserted: patterns.length,
+        });
+      }
+
+      logger.info('Agent run complete');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (runId) await this.agentRunRepository?.failRun(runId, message);
+      throw err;
     }
-
-    // Step 2: OBSERVE — load resume, memory, recent applications
-    const context = await this.observe();
-    logger.info('Observed context', { resumeHash: context.resume.hash });
-
-    // Step 3: ASSESS — Claude reasons about today's strategy
-    const strategy = await this.assess(context);
-    context.currentStrategy = strategy;
-    logger.info('Agent assessed strategy', { strategy: strategy.slice(0, 120) });
-
-    // Step 4: FETCH — get new jobs
-    const fetched = await this.fetchJobs();
-    logger.info(`Fetched ${fetched.length} jobs from APIs`);
-
-    // Step 4a: FILTER — skip jobs already analyzed (avoids re-spending Claude tokens)
-    const newJobs = await this.filterUnanalyzed(fetched);
-    logger.info(`New (unanalyzed) jobs: ${newJobs.length}/${fetched.length}`);
-
-    // Step 4b: SELECT — apply per-location caps before analysis
-    const jobs = this.selectJobsForAnalysis(newJobs);
-    context.jobsToAnalyze = jobs;
-    logger.info(`Selected ${jobs.length}/${newJobs.length} jobs for analysis`);
-
-    // Step 5: ANALYZE — Claude scores each job against the full context
-    const analyses = await this.analyzeJobs(jobs, context);
-    context.analyses = analyses;
-    logger.info(`Analyzed ${analyses.length} jobs`);
-
-    // Step 6: LEARN — Claude identifies patterns from today's results
-    const patterns = await this.learnPatterns(analyses, jobs);
-    logger.info(`Identified ${patterns.length} patterns`);
-
-    // Step 7: STORE — persist results to DB
-    await this.agentMemoryRepository.upsertAll(patterns);
-    logger.info('Agent run complete');
   }
 
   async observe(): Promise<RunningAgentContext> {

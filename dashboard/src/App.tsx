@@ -5,6 +5,7 @@ import { JobDetail } from './pages/JobDetail';
 import { Applications } from './pages/Applications';
 import { AllJobs } from './pages/AllJobs';
 import { SavedJobs } from './pages/SavedJobs';
+import { RunHistory } from './pages/RunHistory';
 
 function NotFound() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/applications" element={<Applications />} />
           <Route path="/all-jobs" element={<AllJobs />} />
           <Route path="/saved-jobs" element={<SavedJobs />} />
+          <Route path="/runs" element={<RunHistory />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
