@@ -49,34 +49,34 @@ export class AutonomousAgent {
     const runId = await this.agentRunRepository?.startRun();
 
     try {
-      // Step 1: VALIDATE TOKEN BUDGET (proactive enforcement before any API calls)
-      if (!this.tokenBudget.validate()) {
-        logger.error('Token budget exceeded. Aborting agent run.');
-        if (runId) await this.agentRunRepository?.failRun(runId, 'Token budget exceeded');
-        return;
-      }
-
-      // Step 2: OBSERVE — load resume, memory, recent applications
+      // Step 1: OBSERVE — load resume, memory, recent applications
       const context = await this.observe();
       logger.info('Observed context', { resumeHash: context.resume.hash });
 
-      // Step 3: ASSESS — Claude reasons about today's strategy
+      // Step 2: ASSESS — Claude reasons about today's strategy
       const strategy = await this.assess(context);
       context.currentStrategy = strategy;
       logger.info('Agent assessed strategy', { strategy: strategy.slice(0, 120) });
 
-      // Step 4: FETCH — get new jobs
+      // Step 3: FETCH — get new jobs
       const fetched = await this.fetchJobs();
       logger.info(`Fetched ${fetched.length} jobs from APIs`);
 
-      // Step 4a: FILTER — skip jobs already analyzed (avoids re-spending Claude tokens)
+      // Step 3a: FILTER — skip jobs already analyzed (avoids re-spending Claude tokens)
       const newJobs = await this.filterUnanalyzed(fetched);
       logger.info(`New (unanalyzed) jobs: ${newJobs.length}/${fetched.length}`);
 
-      // Step 4b: SELECT — apply per-location caps before analysis
+      // Step 3b: SELECT — apply per-location caps before analysis
       const jobs = this.selectJobsForAnalysis(newJobs);
       context.jobsToAnalyze = jobs;
       logger.info(`Selected ${jobs.length}/${newJobs.length} jobs for analysis`);
+
+      // Step 4: VALIDATE TOKEN BUDGET — using real data, immediately before any Claude spend
+      if (!this.tokenBudget.validateForAnalysis(context.resume.redactedText, context.memory, jobs)) {
+        logger.error('Token budget exceeded. Aborting agent run.');
+        if (runId) await this.agentRunRepository?.failRun(runId, 'Token budget exceeded');
+        return;
+      }
 
       // Step 5: ANALYZE — Claude scores each job against the full context
       const analyses = await this.analyzeJobs(jobs, context);
