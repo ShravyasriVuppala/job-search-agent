@@ -64,6 +64,21 @@ export interface Patterns {
   bestJobCategories: string[];
 }
 
+export interface AgentRun {
+  id: string;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string;
+  completedAt?: string;
+  durationSeconds?: number;
+  jobsFetched: number;
+  jobsAnalyzed: number;
+  autoFlagged: number;
+  maybeFlagged: number;
+  skipped: number;
+  patternsUpserted: number;
+  errorMessage?: string;
+}
+
 export type ApplicationStatus =
   | 'applied'
   | 'interview_scheduled'

@@ -1,4 +1,4 @@
-import type { JobWithAnalysis, JobDetail, RawJob, Patterns, Application, ApplicationStatus } from '../types';
+import type { JobWithAnalysis, JobDetail, RawJob, Patterns, Application, ApplicationStatus, AgentRun } from '../types';
 
 const BASE_URL = 'http://localhost:3001/api';
 
@@ -140,4 +140,9 @@ export async function updateApplicationStatus(jobId: string, status: Application
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   });
+}
+
+export async function getAgentRuns(): Promise<AgentRun[]> {
+  const data = await request<{ runs: AgentRun[] }>('/runs');
+  return data?.runs ?? [];
 }

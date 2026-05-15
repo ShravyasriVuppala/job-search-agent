@@ -189,3 +189,38 @@ CREATE INDEX IF NOT EXISTS idx_job_interactions_type
 -- CREATE TABLE IF NOT EXISTS job_interactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE, interaction_type VARCHAR(20) NOT NULL CHECK (interaction_type IN ('saved', 'not_interested')), created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (job_id, interaction_type));
 -- CREATE INDEX IF NOT EXISTS idx_job_interactions_job_id ON job_interactions (job_id);
 -- CREATE INDEX IF NOT EXISTS idx_job_interactions_type ON job_interactions (interaction_type);
+
+-- ============================================================
+-- agent_runs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  status            VARCHAR(20) NOT NULL DEFAULT 'running',
+    -- 'running' | 'completed' | 'failed'
+  started_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at      TIMESTAMP,
+  duration_seconds  INT,
+
+  -- Per-run metrics
+  jobs_fetched      INT         NOT NULL DEFAULT 0,
+  jobs_analyzed     INT         NOT NULL DEFAULT 0,
+  auto_flagged      INT         NOT NULL DEFAULT 0,
+  maybe_flagged     INT         NOT NULL DEFAULT 0,
+  skipped           INT         NOT NULL DEFAULT 0,
+  patterns_upserted INT         NOT NULL DEFAULT 0,
+
+  -- Error tracking
+  error_message     TEXT,
+
+  created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at
+  ON agent_runs (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status
+  ON agent_runs (status);
+
+-- For existing databases, run:
+-- CREATE TABLE IF NOT EXISTS agent_runs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), status VARCHAR(20) NOT NULL DEFAULT 'running', started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP, duration_seconds INT, jobs_fetched INT NOT NULL DEFAULT 0, jobs_analyzed INT NOT NULL DEFAULT 0, auto_flagged INT NOT NULL DEFAULT 0, maybe_flagged INT NOT NULL DEFAULT 0, skipped INT NOT NULL DEFAULT 0, patterns_upserted INT NOT NULL DEFAULT 0, error_message TEXT, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+-- CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at ON agent_runs (started_at DESC);
+-- CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs (status);
