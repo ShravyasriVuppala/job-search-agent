@@ -20,6 +20,9 @@ export interface Config {
   resumePath: string;
   resumeBase64?: string;
 
+  // User context
+  userContext: string;
+
   // Agent behaviour
   nodeEnv: string;
   jobTitles: string[];
