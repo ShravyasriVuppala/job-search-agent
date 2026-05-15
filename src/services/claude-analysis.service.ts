@@ -27,12 +27,23 @@ function extractJson<T>(text: string): T {
 
 export class ClaudeAnalysisService {
   private readonly client: Anthropic;
+  private tokensInput = 0;
+  private tokensOutput = 0;
 
   constructor(
     apiKey: string,
     private readonly model: string,
   ) {
     this.client = new Anthropic({ apiKey });
+  }
+
+  getTokenUsage(): { input: number; output: number } {
+    return { input: this.tokensInput, output: this.tokensOutput };
+  }
+
+  resetTokenUsage(): void {
+    this.tokensInput = 0;
+    this.tokensOutput = 0;
   }
 
   async analyzeJob(
@@ -72,6 +83,9 @@ Scoring: 75+ = auto-flag, 50-74 = maybe-flag, <50 = skip`;
       }),
       CALL_TIMEOUT_MS,
     );
+
+    this.tokensInput += response.usage.input_tokens;
+    this.tokensOutput += response.usage.output_tokens;
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -131,6 +145,9 @@ Respond with ONLY valid JSON (no markdown):
       CALL_TIMEOUT_MS,
     );
 
+    this.tokensInput += response.usage.input_tokens;
+    this.tokensOutput += response.usage.output_tokens;
+
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
@@ -182,6 +199,9 @@ Respond with ONLY valid JSON (no markdown):
       }),
       CALL_TIMEOUT_MS,
     );
+
+    this.tokensInput += response.usage.input_tokens;
+    this.tokensOutput += response.usage.output_tokens;
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

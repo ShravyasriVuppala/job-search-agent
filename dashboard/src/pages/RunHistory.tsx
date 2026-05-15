@@ -76,6 +76,8 @@ export function RunHistory() {
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Maybe</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Skipped</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-600">Patterns</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600">Tokens In</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-600">Tokens Out</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -95,10 +97,12 @@ export function RunHistory() {
                     </td>
                     <td className="px-4 py-3 text-right text-gray-400 tabular-nums">{run.skipped}</td>
                     <td className="px-4 py-3 text-right text-gray-600 tabular-nums">{run.patternsUpserted}</td>
+                    <td className="px-4 py-3 text-right text-gray-500 tabular-nums">{run.tokensInput > 0 ? run.tokensInput.toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3 text-right text-gray-500 tabular-nums">{run.tokensOutput > 0 ? run.tokensOutput.toLocaleString() : '—'}</td>
                   </tr>
                   {run.errorMessage && (
                     <tr className="bg-red-50">
-                      <td colSpan={9} className="px-4 py-2 text-xs text-red-600 font-mono">
+                      <td colSpan={11} className="px-4 py-2 text-xs text-red-600 font-mono">
                         {run.errorMessage}
                       </td>
                     </tr>

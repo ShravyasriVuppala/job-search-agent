@@ -7,6 +7,8 @@ export interface AgentRunMetrics {
   maybeFlagged: number;
   skipped: number;
   patternsUpserted: number;
+  tokensInput: number;
+  tokensOutput: number;
 }
 
 export interface AgentRun {
@@ -21,6 +23,8 @@ export interface AgentRun {
   maybeFlagged: number;
   skipped: number;
   patternsUpserted: number;
+  tokensInput: number;
+  tokensOutput: number;
   errorMessage?: string;
   createdAt: Date;
 }
@@ -46,7 +50,9 @@ export class AgentRunRepository {
            auto_flagged = $4,
            maybe_flagged = $5,
            skipped = $6,
-           patterns_upserted = $7
+           patterns_upserted = $7,
+           tokens_input = $8,
+           tokens_output = $9
        WHERE id = $1`,
       [
         id,
@@ -56,6 +62,8 @@ export class AgentRunRepository {
         metrics.maybeFlagged,
         metrics.skipped,
         metrics.patternsUpserted,
+        metrics.tokensInput,
+        metrics.tokensOutput,
       ],
     );
   }
@@ -87,6 +95,8 @@ export class AgentRunRepository {
       maybe_flagged: number;
       skipped: number;
       patterns_upserted: number;
+      tokens_input: number;
+      tokens_output: number;
       error_message: string | null;
       created_at: Date;
     }>(
@@ -106,6 +116,8 @@ export class AgentRunRepository {
       maybeFlagged: r.maybe_flagged,
       skipped: r.skipped,
       patternsUpserted: r.patterns_upserted,
+      tokensInput: r.tokens_input,
+      tokensOutput: r.tokens_output,
       errorMessage: r.error_message ?? undefined,
       createdAt: r.created_at,
     }));

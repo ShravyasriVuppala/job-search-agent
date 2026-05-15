@@ -208,6 +208,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   maybe_flagged     INT         NOT NULL DEFAULT 0,
   skipped           INT         NOT NULL DEFAULT 0,
   patterns_upserted INT         NOT NULL DEFAULT 0,
+  tokens_input      INT         NOT NULL DEFAULT 0,
+  tokens_output     INT         NOT NULL DEFAULT 0,
 
   -- Error tracking
   error_message     TEXT,
@@ -221,6 +223,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_status
   ON agent_runs (status);
 
 -- For existing databases, run:
--- CREATE TABLE IF NOT EXISTS agent_runs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), status VARCHAR(20) NOT NULL DEFAULT 'running', started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP, duration_seconds INT, jobs_fetched INT NOT NULL DEFAULT 0, jobs_analyzed INT NOT NULL DEFAULT 0, auto_flagged INT NOT NULL DEFAULT 0, maybe_flagged INT NOT NULL DEFAULT 0, skipped INT NOT NULL DEFAULT 0, patterns_upserted INT NOT NULL DEFAULT 0, error_message TEXT, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+-- CREATE TABLE IF NOT EXISTS agent_runs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), status VARCHAR(20) NOT NULL DEFAULT 'running', started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP, duration_seconds INT, jobs_fetched INT NOT NULL DEFAULT 0, jobs_analyzed INT NOT NULL DEFAULT 0, auto_flagged INT NOT NULL DEFAULT 0, maybe_flagged INT NOT NULL DEFAULT 0, skipped INT NOT NULL DEFAULT 0, patterns_upserted INT NOT NULL DEFAULT 0, tokens_input INT NOT NULL DEFAULT 0, tokens_output INT NOT NULL DEFAULT 0, error_message TEXT, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+-- ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_input INT NOT NULL DEFAULT 0;
+-- ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_output INT NOT NULL DEFAULT 0;
 -- CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at ON agent_runs (started_at DESC);
 -- CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs (status);
