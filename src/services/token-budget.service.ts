@@ -1,5 +1,10 @@
-import { TokenBudget } from '../types';
+import { Job, AgentMemory } from '../types';
 import { logger } from '../utils/logger';
+
+// ~4 characters per token is a reliable approximation for English text.
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
 
 // CONTEXT WINDOW BUDGET:
 // - Max available: 200K tokens
@@ -25,27 +30,28 @@ import { logger } from '../utils/logger';
 export class TokenBudgetService {
   private readonly maxContextTokens = 200_000;
   private readonly safetyMargin = 150_000;
-  private readonly resumeTokens = 3_000;
-  private readonly agentMemoryTokens = 5_000;
-  private readonly jobsTokens = 50_000;
   // Each job analysis uses ~1K tokens (400 input + 500 output cap).
   // Hard cap: 30 jobs per run, distributed by location priority.
   readonly maxJobsPerRun = 30;
 
-  // Proactive enforcement: tokenBudget.validate() runs BEFORE any Claude API calls.
-  // If context would exceed safety margin, agent halts with clear error.
-  // This prevents runaway costs and context bloat.
-  // In production, this guards against agent misalignment.
-  validate(): boolean {
-    const total = this.resumeTokens + this.agentMemoryTokens + this.jobsTokens;
+  // Validates token budget using real runtime data — called after jobs are selected,
+  // immediately before the first Claude API call in analyzeJobs.
+  // Uses ~4 chars/token approximation (reliable for English text).
+  validateForAnalysis(resumeText: string, memory: AgentMemory[], jobs: Job[]): boolean {
+    const resumeTokens = estimateTokens(resumeText);
+    const memoryTokens = estimateTokens(memory.map((m) => `${m.patternName}: ${m.confidenceScore}`).join('\n'));
+    const jobsTokens = jobs.reduce((sum, j) => sum + estimateTokens(j.title + j.description + (j.location ?? '')), 0);
+    const total = resumeTokens + memoryTokens + jobsTokens;
     const buffer = this.safetyMargin - total;
 
     if (total > this.safetyMargin) {
-      logger.error(`Context budget exceeded: ${total} > ${this.safetyMargin}`);
+      logger.error('Token budget exceeded — aborting before Claude API calls', {
+        resumeTokens, memoryTokens, jobsTokens, total, limit: this.safetyMargin,
+      });
       return false;
     }
 
-    logger.info(`Token budget: ${total}/${this.safetyMargin} (${buffer} buffer remaining)`);
+    logger.info('Token budget validated', { resumeTokens, memoryTokens, jobsTokens, total, buffer });
     return true;
   }
 
@@ -74,15 +80,4 @@ export class TokenBudgetService {
     return caps;
   }
 
-  getBudget(): TokenBudget {
-    const total = this.resumeTokens + this.agentMemoryTokens + this.jobsTokens;
-    return {
-      maxContextTokens: this.maxContextTokens,
-      safetyMargin: this.safetyMargin,
-      resume: this.resumeTokens,
-      agentMemory: this.agentMemoryTokens,
-      jobsToAnalyze: this.jobsTokens,
-      buffer: this.safetyMargin - total,
-    };
-  }
 }
