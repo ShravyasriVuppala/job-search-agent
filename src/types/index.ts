@@ -7,8 +7,10 @@ export interface Config {
   claudeModel: string;
   claudeMaxTokens: number;
 
-  // SendGrid
-  sendgridApiKey: string;
+  // Mailgun
+  mailgunApiKey: string;
+  mailgunDomain: string;
+  mailgunBaseUrl: string;
   recipientEmail: string;
 
   // Job APIs

@@ -41,12 +41,6 @@ function validateClaudeApiKey(key: string): void {
   }
 }
 
-function validateSendgridApiKey(key: string): void {
-  if (!key.startsWith('SG.')) {
-    throw new Error('SENDGRID_API_KEY must start with SG.');
-  }
-}
-
 function validateEmail(email: string): void {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error(`RECIPIENT_EMAIL is not a valid email address`);
@@ -64,7 +58,9 @@ function validateResumePath(resumePath: string, base64: string): void {
 export function validateAndLoadConfig(): Config {
   const databaseUrl = requireEnv('DATABASE_URL');
   const claudeApiKey = requireEnv('CLAUDE_API_KEY');
-  const sendgridApiKey = requireEnv('SENDGRID_API_KEY');
+  const mailgunApiKey = requireEnv('MAILGUN_API_KEY');
+  const mailgunDomain = requireEnv('MAILGUN_DOMAIN');
+  const mailgunBaseUrl = requireEnv('MAILGUN_BASE_URL');
   const recipientEmail = requireEnv('RECIPIENT_EMAIL');
   const resumePath = requireEnv('RESUME_PATH');
   const resumeBase64 = optionalEnv('RESUME_BASE64');
@@ -77,7 +73,6 @@ export function validateAndLoadConfig(): Config {
 
   validateDatabaseUrl(databaseUrl);
   validateClaudeApiKey(claudeApiKey);
-  validateSendgridApiKey(sendgridApiKey);
   validateEmail(recipientEmail);
   validateResumePath(resumePath, resumeBase64);
 
@@ -115,7 +110,9 @@ export function validateAndLoadConfig(): Config {
     claudeApiKey,
     claudeModel,
     claudeMaxTokens,
-    sendgridApiKey,
+    mailgunApiKey,
+    mailgunDomain,
+    mailgunBaseUrl,
     recipientEmail,
     resumePath,
     resumeBase64: resumeBase64 || undefined,
