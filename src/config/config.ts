@@ -110,6 +110,7 @@ export function validateAndLoadConfig(): Config {
     claudeApiKey,
     claudeModel,
     claudeMaxTokens,
+    userContext: optionalEnv('USER_CONTEXT', ''),
     mailgunApiKey,
     mailgunDomain,
     mailgunBaseUrl,

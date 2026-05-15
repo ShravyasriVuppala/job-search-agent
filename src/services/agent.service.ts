@@ -138,10 +138,14 @@ export class AutonomousAgent {
             .join('\n')
         : '- No patterns learned yet (first run)';
 
+    const userContextSection = this.config.userContext
+      ? `\nUSER CONTEXT (explicit, highest priority):\n${this.config.userContext}\n`
+      : '';
+    const yearsExp = metadata.yearsExperience ?? this.config.yearsExperience;
     const prompt = `You are an autonomous job search agent.
-
+${userContextSection}
 USER PROFILE:
-${metadata.yearsExperience ?? 'Unknown'} years experience
+${yearsExp} years experience
 Technologies: ${(metadata.technologies ?? []).join(', ')}
 Companies: ${(metadata.companies ?? []).join(', ')}
 Preferred titles: ${this.config.jobTitles.join(', ')}
@@ -232,8 +236,9 @@ Be concise (2-3 sentences).`;
           const result = await this.claudeAnalysisService.analyzeJob(
             job,
             context.resume.redactedText,
-            context.resume.metadata.yearsExperience ?? 0,
+            context.resume.metadata.yearsExperience ?? this.config.yearsExperience,
             this.config.preferredTechnicalStack,
+            this.config.userContext || undefined,
           );
 
           let coverLetterDraft: string | undefined;
@@ -296,8 +301,11 @@ Be concise (2-3 sentences).`;
         ? context.memory.map((p) => `- ${p.patternName}: ${p.confidenceScore.toFixed(2)}`).join('\n')
         : '- None yet';
 
+    const userContextSection = this.config.userContext
+      ? `\nUSER CONTEXT (explicit, highest priority):\n${this.config.userContext}\n`
+      : '';
     const prompt = `You are an autonomous job search agent.
-
+${userContextSection}
 USER PROFILE (redacted — no PII):
 ${context.resume.redactedText}
 

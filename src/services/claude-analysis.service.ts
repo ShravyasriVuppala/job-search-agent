@@ -51,8 +51,12 @@ export class ClaudeAnalysisService {
     resume: string,
     yearsExperience: number,
     preferredStack: string[],
+    userContext?: string,
   ): Promise<JobAnalysisResult> {
-    const prompt = `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.
+    const contextSection = userContext
+      ? `\nUSER CONTEXT (explicit, highest priority — override any inferences from resume):\n${userContext}\n`
+      : '';
+    const prompt = `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.${contextSection}
 
 RESUME (redacted):
 ${resume.slice(0, 600)}
