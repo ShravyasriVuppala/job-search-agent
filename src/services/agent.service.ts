@@ -7,6 +7,7 @@ import { ResumeRepository } from '../db/resume.repository';
 import { AgentMemoryRepository } from '../db/agent-memory.repository';
 import { JobRepository } from '../db/job.repository';
 import { ClaudeAnalysisRepository } from '../db/claude-analysis.repository';
+import { ApplicationRepository } from '../db/application.repository';
 import { agentContext } from '../agent/context';
 import { logger } from '../utils/logger';
 
@@ -334,9 +335,16 @@ Respond with ONLY valid JSON (no markdown):
       return [];
     }
 
+    // Fetch recent applied jobs — strongest learning signal (capped to avoid prompt bloat)
+    const appRepo = new ApplicationRepository();
+    const appliedJobs = await appRepo.getRecentApplications(30).catch(() => []);
+    if (appliedJobs.length > 0) {
+      logger.info(`Including ${appliedJobs.length} user-applied jobs as learning signal`);
+    }
+
     if (this.claudeAnalysisService) {
       try {
-        const learning = await this.claudeAnalysisService.learnPatterns(analyses);
+        const learning = await this.claudeAnalysisService.learnPatterns(analyses, appliedJobs);
         logger.info('Pattern learning complete', {
           topSkills: learning.topSkillsMatched,
           focus: learning.recommendedFocus,
@@ -365,7 +373,14 @@ Respond with ONLY valid JSON (no markdown):
       .map((a) => `- ${a.company}: patterns=[${a.matched_patterns.join(', ')}] score=${a.relevance_score}`)
       .join('\n');
 
+    const appliedLines = appliedJobs.length > 0
+      ? appliedJobs.map((j) => `- ${j.title} at ${j.company}`).join('\n')
+      : '- None yet';
+
     const prompt = `You analyzed ${analyses.length} jobs today.
+
+USER-APPLIED JOBS (strongest signal — confirmed user intent):
+${appliedLines}
 
 HIGH-VALUE JOBS (relevance ≥ 75):
 ${highValueLines || '- None found today'}
@@ -375,7 +390,7 @@ ALL RESULTS SUMMARY:
 - Needs review: ${analyses.filter((a) => a.overall_category === 'needs-review').length}
 - Skipped: ${analyses.filter((a) => a.overall_category === 'skip').length}
 
-What patterns do you observe?
+What patterns do you observe? Weight user-applied jobs most heavily.
 - Did certain companies appear multiple times with high scores?
 - Did certain technologies dominate high-value jobs?
 - Is there a location trend?
