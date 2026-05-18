@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { JobWithAnalysis, Patterns } from '../types';
 import { JobList } from '../components/JobList';
 import { LocationFilter } from '../components/LocationFilter';
@@ -14,6 +14,7 @@ export function Dashboard() {
   const [patternsLoading, setPatternsLoading] = useState(true);
   const [location, setLocation] = useState('all');
   const [staleHours, setStaleHours] = useState<number | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
 
   useEffect(() => {
     getAllAnalyses(100).then(({ analyses: data }) => {
@@ -32,9 +33,15 @@ export function Dashboard() {
     });
   }, []);
 
-  const filtered = location === 'all'
-    ? analyses
-    : analyses.filter((a) => a.job.locationCategory === location);
+  const hiddenCount = useMemo(() => analyses.filter((a) => a.job.isNotInterested).length, [analyses]);
+
+  const filtered = useMemo(() => {
+    return analyses.filter((a) => {
+      if (!showHidden && a.job.isNotInterested) return false;
+      if (location !== 'all' && a.job.locationCategory !== location) return false;
+      return true;
+    });
+  }, [analyses, location, showHidden]);
 
   const autoFlagged = filtered.filter((a) => a.analysis.overallCategory === 'auto-flag');
   const maybeFlagged = filtered.filter((a) => a.analysis.overallCategory === 'maybe-flag');
@@ -57,7 +64,17 @@ export function Dashboard() {
             {isLoading ? 'Loading…' : `${analyses.length} jobs analyzed`}
           </p>
         </div>
-        <LocationFilter selected={location} onChange={setLocation} />
+        <div className="flex items-center gap-3">
+          {hiddenCount > 0 && (
+            <button
+              onClick={() => setShowHidden((v) => !v)}
+              className="text-sm text-gray-500 hover:text-gray-700 underline underline-offset-2"
+            >
+              {showHidden ? `Hide not-interested (${hiddenCount})` : `Show not-interested (${hiddenCount})`}
+            </button>
+          )}
+          <LocationFilter selected={location} onChange={setLocation} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
