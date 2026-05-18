@@ -202,9 +202,15 @@ export class ClaudeAnalysisQueryRepository {
            j.company_hiring_url, j.company_size, j.company_website,
            ca.id AS analysis_id, ca.relevance_score, ca.interview_chance,
            ca.overall_category, ca.relevance_reasoning, ca.insights,
-           ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at
+           ca.matched_patterns, ca.cover_letter_draft, ca.analyzed_at,
+           (ji_s.id IS NOT NULL) AS is_saved,
+           (ji_ni.id IS NOT NULL) AS is_not_interested,
+           (a.id IS NOT NULL) AS is_applied
          FROM jobs j
          JOIN claude_analysis ca ON j.id = ca.job_id
+         LEFT JOIN job_interactions ji_s ON ji_s.job_id = j.id AND ji_s.interaction_type = 'saved'
+         LEFT JOIN job_interactions ji_ni ON ji_ni.job_id = j.id AND ji_ni.interaction_type = 'not_interested'
+         LEFT JOIN applications a ON a.job_id = j.id
          WHERE ca.is_stale = FALSE
          ORDER BY ca.analyzed_at DESC
          LIMIT $1 OFFSET $2`,
@@ -227,6 +233,9 @@ export class ClaudeAnalysisQueryRepository {
         companyHiringUrl: row.company_hiring_url as string | undefined,
         companySize: row.company_size as string | undefined,
         companyWebsite: row.company_website as string | undefined,
+        isSaved: row.is_saved as boolean,
+        isNotInterested: row.is_not_interested as boolean,
+        isApplied: row.is_applied as boolean,
       },
       analysis: {
         id: row.analysis_id as string,

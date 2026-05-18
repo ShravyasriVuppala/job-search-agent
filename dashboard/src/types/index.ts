@@ -14,6 +14,7 @@ export interface Job {
   companyWebsite?: string;
   isSaved?: boolean;
   isNotInterested?: boolean;
+  isApplied?: boolean;
 }
 
 export interface Analysis {
