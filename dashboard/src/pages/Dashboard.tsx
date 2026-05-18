@@ -15,6 +15,7 @@ export function Dashboard() {
   const [location, setLocation] = useState('all');
   const [staleHours, setStaleHours] = useState<number | null>(null);
   const [showHidden, setShowHidden] = useState(false);
+  const [showApplied, setShowApplied] = useState(false);
 
   useEffect(() => {
     getAllAnalyses(100).then(({ analyses: data }) => {
@@ -34,14 +35,16 @@ export function Dashboard() {
   }, []);
 
   const hiddenCount = useMemo(() => analyses.filter((a) => a.job.isNotInterested).length, [analyses]);
+  const appliedCount = useMemo(() => analyses.filter((a) => a.job.isApplied).length, [analyses]);
 
   const filtered = useMemo(() => {
     return analyses.filter((a) => {
       if (!showHidden && a.job.isNotInterested) return false;
+      if (!showApplied && a.job.isApplied) return false;
       if (location !== 'all' && a.job.locationCategory !== location) return false;
       return true;
     });
-  }, [analyses, location, showHidden]);
+  }, [analyses, location, showHidden, showApplied]);
 
   const autoFlagged = filtered.filter((a) => a.analysis.overallCategory === 'auto-flag');
   const maybeFlagged = filtered.filter((a) => a.analysis.overallCategory === 'maybe-flag');
@@ -65,6 +68,14 @@ export function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {appliedCount > 0 && (
+            <button
+              onClick={() => setShowApplied((v) => !v)}
+              className="text-sm text-gray-500 hover:text-gray-700 underline underline-offset-2"
+            >
+              {showApplied ? `Hide applied (${appliedCount})` : `Show applied (${appliedCount})`}
+            </button>
+          )}
           {hiddenCount > 0 && (
             <button
               onClick={() => setShowHidden((v) => !v)}
