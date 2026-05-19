@@ -123,7 +123,7 @@ export class AutonomousAgent {
 
       if (runId) {
         const claudeTokens = this.claudeService.getTokenUsage();
-        const analysisTokens = this.claudeAnalysisService?.getTokenUsage() ?? { input: 0, output: 0 };
+        const analysisTokens = this.claudeAnalysisService?.getTokenUsage() ?? { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
         await this.agentRunRepository?.completeRun(runId, {
           jobsFetched: fetched.length,
           jobsAnalyzed: analyses.length,
@@ -137,6 +137,8 @@ export class AutonomousAgent {
         logger.info('Token usage for this run', {
           input: claudeTokens.input + analysisTokens.input,
           output: claudeTokens.output + analysisTokens.output,
+          cacheCreation: analysisTokens.cacheCreation,
+          cacheRead: analysisTokens.cacheRead,
         });
       }
 

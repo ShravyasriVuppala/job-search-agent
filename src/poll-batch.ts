@@ -134,7 +134,11 @@ async function processBatch(
       tokensInput: tokenUsage.input,
       tokensOutput: tokenUsage.output,
     });
-    logger.info('Agent run completed', { runId: batchRun.runId });
+    logger.info('Agent run completed', {
+      runId: batchRun.runId,
+      cacheCreationTokens: tokenUsage.cacheCreation,
+      cacheReadTokens: tokenUsage.cacheRead,
+    });
   }
 
   // 6. Mark batch as done
