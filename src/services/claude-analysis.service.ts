@@ -9,6 +9,10 @@ import {
 } from '../types';
 import { logger } from '../utils/logger';
 
+export interface BatchJobResult {
+  analysis: JobAnalysisResult;
+}
+
 const CALL_TIMEOUT_MS = 60_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -52,11 +56,13 @@ export class ClaudeAnalysisService {
     yearsExperience: number,
     preferredStack: string[],
     userContext?: string,
+    strategy?: string,
   ): Promise<JobAnalysisResult> {
     const contextSection = userContext
       ? `\nUSER CONTEXT (explicit, highest priority — override any inferences from resume):\n${userContext}\n`
       : '';
-    const prompt = `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.${contextSection}
+    const strategySection = strategy ? `\nTODAY'S STRATEGY:\n${strategy}\n` : '';
+    const prompt = `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.${contextSection}${strategySection}
 
 RESUME (redacted):
 ${resume.slice(0, 600)}
@@ -158,6 +164,124 @@ Respond with ONLY valid JSON (no markdown):
       .join('');
 
     return extractJson<CoverLetterResult>(text);
+  }
+
+  async submitAnalysisBatch(
+    jobs: Job[],
+    resume: string,
+    yearsExperience: number,
+    preferredStack: string[],
+    userContext?: string,
+    strategy?: string,
+  ): Promise<string> {
+    const requests = jobs.map((job) => ({
+      custom_id: job.id!,
+      params: {
+        model: this.model,
+        max_tokens: 500,
+        messages: [{ role: 'user' as const, content: this.buildBatchPrompt(job, resume, yearsExperience, preferredStack, userContext, strategy) }],
+      },
+    }));
+
+    const batch = await this.client.beta.messages.batches.create({ requests });
+    logger.info('Submitted Anthropic message batch', { batchId: batch.id, jobCount: requests.length });
+    return batch.id;
+  }
+
+  async checkBatchStatus(batchId: string): Promise<'in_progress' | 'ended'> {
+    const batch = await this.client.beta.messages.batches.retrieve(batchId);
+    logger.info('Batch status', {
+      batchId,
+      status: batch.processing_status,
+      counts: batch.request_counts,
+    });
+    return batch.processing_status === 'ended' ? 'ended' : 'in_progress';
+  }
+
+  async processBatchResults(batchId: string): Promise<Map<string, BatchJobResult>> {
+    const results = new Map<string, BatchJobResult>();
+
+    for await (const item of await this.client.beta.messages.batches.results(batchId)) {
+      if (item.result.type !== 'succeeded') {
+        logger.warn(`Batch item ${item.custom_id} did not succeed`, { type: item.result.type });
+        continue;
+      }
+
+      const message = item.result.message;
+      this.tokensInput += message.usage.input_tokens;
+      this.tokensOutput += message.usage.output_tokens;
+
+      const text = message.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('');
+
+      try {
+        type RawBatchResult = {
+          relevanceScore: number;
+          interviewChance: number;
+          overallCategory: string;
+          relevanceReasoning: string;
+          insights: string;
+          matchedPatterns: string[];
+        };
+
+        const raw = extractJson<RawBatchResult>(text);
+        results.set(item.custom_id, {
+          analysis: {
+            relevanceScore: raw.relevanceScore,
+            interviewChance: raw.interviewChance,
+            overallCategory: raw.overallCategory as AnalysisCategory,
+            relevanceReasoning: raw.relevanceReasoning,
+            insights: raw.insights,
+            matchedPatterns: raw.matchedPatterns ?? [],
+          },
+        });
+      } catch (err) {
+        logger.error(`Failed to parse batch result for job ${item.custom_id}`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    logger.info(`Processed batch results`, { batchId, parsed: results.size });
+    return results;
+  }
+
+  private buildBatchPrompt(
+    job: Job,
+    resume: string,
+    yearsExperience: number,
+    preferredStack: string[],
+    userContext?: string,
+    strategy?: string,
+  ): string {
+    const contextSection = userContext
+      ? `\nUSER CONTEXT (explicit, highest priority — override any inferences from resume):\n${userContext}\n`
+      : '';
+    const strategySection = strategy ? `\nTODAY'S STRATEGY:\n${strategy}\n` : '';
+    return `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.${contextSection}${strategySection}
+
+RESUME (redacted):
+${resume.slice(0, 600)}
+
+JOB:
+Title: ${job.title}
+Company: ${job.company}
+Location: ${job.location ?? 'Not specified'}
+Description: ${job.description.slice(0, 1000)}
+
+Respond with ONLY valid JSON (no markdown):
+{
+  "relevanceScore": <0-100>,
+  "interviewChance": <0-100>,
+  "overallCategory": "auto-flag" | "maybe-flag" | "skip",
+  "relevanceReasoning": "<one sentence>",
+  "insights": "<one sentence>",
+  "matchedPatterns": ["<pattern>"]
+}
+
+Scoring: 75+ = auto-flag, 50-74 = maybe-flag, <50 = skip`;
   }
 
   async learnPatterns(

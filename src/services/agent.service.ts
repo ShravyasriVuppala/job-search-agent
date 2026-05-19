@@ -9,6 +9,7 @@ import { JobRepository } from '../db/job.repository';
 import { ClaudeAnalysisRepository } from '../db/claude-analysis.repository';
 import { ApplicationRepository } from '../db/application.repository';
 import { AgentRunRepository } from '../db/agent-run.repository';
+import { BatchRunRepository } from '../db/batch-run.repository';
 import { agentContext } from '../agent/context';
 import { logger } from '../utils/logger';
 
@@ -43,6 +44,7 @@ export class AutonomousAgent {
     private readonly claudeAnalysisRepository?: ClaudeAnalysisRepository,
     private readonly jobRepository?: JobRepository,
     private readonly agentRunRepository?: AgentRunRepository,
+    private readonly batchRunRepository?: BatchRunRepository,
   ) {}
 
   async runDailyLoop(): Promise<void> {
@@ -75,6 +77,30 @@ export class AutonomousAgent {
       if (!this.tokenBudget.validateForAnalysis(context.resume.redactedText, context.memory, jobs)) {
         logger.error('Token budget exceeded. Aborting agent run.');
         if (runId) await this.agentRunRepository?.failRun(runId, 'Token budget exceeded');
+        return;
+      }
+
+      if (this.config.useBatchApi) {
+        if (jobs.length === 0) {
+          logger.info('No new jobs to analyze — skipping batch submission');
+          if (runId) {
+            await this.agentRunRepository?.completeRun(runId, {
+              jobsFetched: fetched.length,
+              jobsAnalyzed: 0,
+              autoFlagged: 0,
+              maybeFlagged: 0,
+              skipped: 0,
+              patternsUpserted: 0,
+              tokensInput: 0,
+              tokensOutput: 0,
+            });
+          }
+          return;
+        }
+        // Step 5 (BATCH): Submit all jobs to Anthropic Message Batches API and exit.
+        // The poll-batch script will collect results, learn patterns, and complete the run.
+        await this.submitBatch(jobs, context, runId, fetched.length);
+        logger.info('Batch submitted — agent exiting. Poller will complete this run.');
         return;
       }
 
@@ -226,6 +252,35 @@ Be concise (2-3 sentences).`;
     return selected;
   }
 
+  private async submitBatch(
+    jobs: Job[],
+    context: RunningAgentContext,
+    runId: string | undefined,
+    jobsFetched: number,
+  ): Promise<void> {
+    if (!this.claudeAnalysisService || !this.batchRunRepository) {
+      throw new Error('Batch mode requires claudeAnalysisService and batchRunRepository');
+    }
+
+    const batchId = await this.claudeAnalysisService.submitAnalysisBatch(
+      jobs,
+      context.resume.redactedText,
+      context.resume.metadata.yearsExperience ?? this.config.yearsExperience,
+      this.config.preferredTechnicalStack,
+      this.config.userContext || undefined,
+      context.currentStrategy || undefined,
+    );
+
+    await this.batchRunRepository.createBatchRun(
+      batchId,
+      jobs.map((j) => j.id!),
+      jobsFetched,
+      runId,
+    );
+
+    logger.info('Batch run recorded', { batchId, jobCount: jobs.length, runId });
+  }
+
   async analyzeJobs(jobs: Job[], context: RunningAgentContext): Promise<JobAnalysis[]> {
     const analyses: JobAnalysis[] = [];
     for (const job of jobs) {
@@ -239,6 +294,7 @@ Be concise (2-3 sentences).`;
             context.resume.metadata.yearsExperience ?? this.config.yearsExperience,
             this.config.preferredTechnicalStack,
             this.config.userContext || undefined,
+            context.currentStrategy || undefined,
           );
 
           let coverLetterDraft: string | undefined;

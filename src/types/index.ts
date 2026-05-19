@@ -52,6 +52,9 @@ export interface Config {
   agentMemoryRetentionDays: number;
   enablePatternLearning: boolean;
   patternConfidenceThreshold: number;
+
+  // Batch API
+  useBatchApi: boolean;
 }
 
 export interface ResumeMetadata {

@@ -72,6 +72,16 @@ export class JobRepository {
     return result.rows.map(mapRow);
   }
 
+  async getJobsByIds(ids: string[]): Promise<Job[]> {
+    if (ids.length === 0) return [];
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT * FROM jobs WHERE id = ANY($1)`,
+      [ids],
+    );
+    return result.rows.map(mapRow);
+  }
+
   async getJobsByLocationCategory(category: string): Promise<Job[]> {
     const pool = getPool();
     const result = await pool.query(

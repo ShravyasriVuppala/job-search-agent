@@ -14,6 +14,7 @@ import { AgentMemoryRepository } from './db/agent-memory.repository';
 import { JobRepository } from './db/job.repository';
 import { ClaudeAnalysisRepository } from './db/claude-analysis.repository';
 import { AgentRunRepository } from './db/agent-run.repository';
+import { BatchRunRepository } from './db/batch-run.repository';
 import { agentContext } from './agent/context';
 
 async function main(): Promise<void> {
@@ -67,6 +68,7 @@ async function main(): Promise<void> {
   const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
   const claudeAnalysisRepository = new ClaudeAnalysisRepository();
   const agentRunRepository = new AgentRunRepository();
+  const batchRunRepository = new BatchRunRepository();
 
   const agent = new AutonomousAgent(
     config,
@@ -79,6 +81,7 @@ async function main(): Promise<void> {
     claudeAnalysisRepository,
     jobRepository,
     agentRunRepository,
+    batchRunRepository,
   );
 
   await agent.runDailyLoop();

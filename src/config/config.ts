@@ -157,5 +157,6 @@ export function validateAndLoadConfig(): Config {
       optionalEnv('ENABLE_PATTERN_LEARNING', 'true') !== 'false',
     patternConfidenceThreshold,
     rapidApiKey: optionalEnv('RAPIDAPI_KEY'),
+    useBatchApi: optionalEnv('USE_BATCH_API', 'false') !== 'false',
   };
 }
