@@ -51,8 +51,8 @@ export class AgentRunRepository {
            maybe_flagged = $5,
            skipped = $6,
            patterns_upserted = $7,
-           tokens_input = $8,
-           tokens_output = $9
+           tokens_input = tokens_input + $8,
+           tokens_output = tokens_output + $9
        WHERE id = $1`,
       [
         id,
@@ -65,6 +65,17 @@ export class AgentRunRepository {
         metrics.tokensInput,
         metrics.tokensOutput,
       ],
+    );
+  }
+
+  async recordAssessTokens(id: string, tokensInput: number, tokensOutput: number): Promise<void> {
+    const pool = getPool();
+    await pool.query(
+      `UPDATE agent_runs
+       SET tokens_input = tokens_input + $2,
+           tokens_output = tokens_output + $3
+       WHERE id = $1`,
+      [id, tokensInput, tokensOutput],
     );
   }
 

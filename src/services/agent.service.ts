@@ -84,6 +84,7 @@ export class AutonomousAgent {
         if (jobs.length === 0) {
           logger.info('No new jobs to analyze — skipping batch submission');
           if (runId) {
+            const assessTokens = this.claudeService.getTokenUsage();
             await this.agentRunRepository?.completeRun(runId, {
               jobsFetched: fetched.length,
               jobsAnalyzed: 0,
@@ -91,8 +92,8 @@ export class AutonomousAgent {
               maybeFlagged: 0,
               skipped: 0,
               patternsUpserted: 0,
-              tokensInput: 0,
-              tokensOutput: 0,
+              tokensInput: assessTokens.input,
+              tokensOutput: assessTokens.output,
             });
           }
           return;
@@ -100,6 +101,10 @@ export class AutonomousAgent {
         // Step 5 (BATCH): Submit all jobs to Anthropic Message Batches API and exit.
         // The poll-batch script will collect results, learn patterns, and complete the run.
         await this.submitBatch(jobs, context, runId, fetched.length);
+        if (runId) {
+          const assessTokens = this.claudeService.getTokenUsage();
+          await this.agentRunRepository?.recordAssessTokens(runId, assessTokens.input, assessTokens.output);
+        }
         logger.info('Batch submitted — agent exiting. Poller will complete this run.');
         return;
       }
