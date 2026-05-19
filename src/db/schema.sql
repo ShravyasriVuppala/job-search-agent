@@ -222,6 +222,33 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at
 CREATE INDEX IF NOT EXISTS idx_agent_runs_status
   ON agent_runs (status);
 
+-- ============================================================
+-- batch_runs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS batch_runs (
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id       TEXT        NOT NULL UNIQUE,  -- Anthropic's batch ID
+  status         VARCHAR(20) NOT NULL DEFAULT 'pending',
+    -- 'pending' | 'completed' | 'failed'
+  job_ids        TEXT[]      NOT NULL,
+  jobs_fetched   INT         NOT NULL DEFAULT 0,
+  run_id         UUID        REFERENCES agent_runs(id) ON DELETE SET NULL,
+  submitted_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at   TIMESTAMPTZ,
+  error_message  TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_batch_runs_status
+  ON batch_runs (status);
+CREATE INDEX IF NOT EXISTS idx_batch_runs_submitted_at
+  ON batch_runs (submitted_at DESC);
+
+-- For existing databases, run:
+-- CREATE TABLE IF NOT EXISTS batch_runs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), batch_id TEXT NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'pending', job_ids TEXT[] NOT NULL, jobs_fetched INT NOT NULL DEFAULT 0, run_id UUID REFERENCES agent_runs(id) ON DELETE SET NULL, submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), completed_at TIMESTAMPTZ, error_message TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+-- CREATE INDEX IF NOT EXISTS idx_batch_runs_status ON batch_runs (status);
+-- CREATE INDEX IF NOT EXISTS idx_batch_runs_submitted_at ON batch_runs (submitted_at DESC);
+
 -- For existing databases, run:
 -- CREATE TABLE IF NOT EXISTS agent_runs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), status VARCHAR(20) NOT NULL DEFAULT 'running', started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP, duration_seconds INT, jobs_fetched INT NOT NULL DEFAULT 0, jobs_analyzed INT NOT NULL DEFAULT 0, auto_flagged INT NOT NULL DEFAULT 0, maybe_flagged INT NOT NULL DEFAULT 0, skipped INT NOT NULL DEFAULT 0, patterns_upserted INT NOT NULL DEFAULT 0, tokens_input INT NOT NULL DEFAULT 0, tokens_output INT NOT NULL DEFAULT 0, error_message TEXT, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
 -- ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tokens_input INT NOT NULL DEFAULT 0;
