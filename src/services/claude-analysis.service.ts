@@ -6,6 +6,7 @@ import {
   CoverLetterResult,
   PatternLearning,
   AnalysisCategory,
+  AgentMemory,
 } from '../types';
 import { logger } from '../utils/logger';
 
@@ -64,10 +65,12 @@ export class ClaudeAnalysisService {
     resume: string,
     yearsExperience: number,
     preferredStack: string[],
+    memory: AgentMemory[],
+    appliedJobs: { title: string; company: string; location?: string }[],
     userContext?: string,
     strategy?: string,
   ): Promise<JobAnalysisResult> {
-    const content = this.buildAnalysisContent(job, resume, yearsExperience, preferredStack, userContext, strategy);
+    const content = this.buildAnalysisContent(job, resume, yearsExperience, preferredStack, memory, appliedJobs, userContext, strategy);
 
     const response = await withTimeout(
       this.client.messages.create({
@@ -157,6 +160,8 @@ Respond with ONLY valid JSON (no markdown):
     resume: string,
     yearsExperience: number,
     preferredStack: string[],
+    memory: AgentMemory[],
+    appliedJobs: { title: string; company: string; location?: string }[],
     userContext?: string,
     strategy?: string,
   ): Promise<string> {
@@ -165,7 +170,7 @@ Respond with ONLY valid JSON (no markdown):
       params: {
         model: this.model,
         max_tokens: 500,
-        messages: [{ role: 'user' as const, content: this.buildAnalysisContent(job, resume, yearsExperience, preferredStack, userContext, strategy) }],
+        messages: [{ role: 'user' as const, content: this.buildAnalysisContent(job, resume, yearsExperience, preferredStack, memory, appliedJobs, userContext, strategy) }],
       },
     }));
 
@@ -236,12 +241,14 @@ Respond with ONLY valid JSON (no markdown):
     return results;
   }
 
-  // Static block (instructions + resume + schema) is cached; dynamic block (job details) is not.
+  // Static block (instructions + resume + patterns + schema) is cached; dynamic block (job details) is not.
   private buildAnalysisContent(
     job: Job,
     resume: string,
     yearsExperience: number,
     preferredStack: string[],
+    memory: AgentMemory[],
+    appliedJobs: { title: string; company: string; location?: string }[],
     userContext?: string,
     strategy?: string,
   ): Anthropic.TextBlockParam[] {
@@ -250,8 +257,16 @@ Respond with ONLY valid JSON (no markdown):
       : '';
     const strategySection = strategy ? `\nTODAY'S STRATEGY:\n${strategy}\n` : '';
 
-    const staticText = `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.${contextSection}${strategySection}
+    const topPatterns = memory.slice(0, 10);
+    const memorySection = topPatterns.length > 0
+      ? `\nLEARNED PATTERNS (use to calibrate scoring):\n${topPatterns.map((m) => `- ${m.patternName}: confidence ${m.confidenceScore.toFixed(2)}`).join('\n')}\n`
+      : '';
 
+    const appliedSection = appliedJobs.length > 0
+      ? `\nPREVIOUSLY APPLIED JOBS (strongest signal — confirmed user intent, weight heavily):\n${appliedJobs.map((j) => `- ${j.title} at ${j.company}${j.location ? ` (${j.location})` : ''}`).join('\n')}\n`
+      : '';
+
+    const staticText = `Analyze this job posting for a software engineer with ${yearsExperience} years of experience in ${preferredStack.join(', ')}.${contextSection}${strategySection}${memorySection}${appliedSection}
 RESUME (redacted):
 ${resume}
 
@@ -265,7 +280,10 @@ Respond with ONLY valid JSON (no markdown):
   "matchedPatterns": ["<pattern>"]
 }
 
-Scoring: 75+ = auto-flag, 50-74 = maybe-flag, <50 = skip`;
+Scoring guide:
+- 75-100 (auto-flag): Strong match on title, required tech stack, and seniority. User should apply without hesitation.
+- 50-74 (maybe-flag): Partial match with gaps worth the user reviewing manually before deciding.
+- 0-49 (skip): Poor fit — wrong role type, misaligned tech requirements, or inappropriate seniority level.`;
 
     const dynamicText = `JOB:
 Title: ${job.title}

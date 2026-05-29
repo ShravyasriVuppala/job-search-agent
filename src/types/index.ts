@@ -193,6 +193,7 @@ export interface RunningAgentContext {
     metadata: ResumeMetadata;
   };
   memory: AgentMemory[];
+  appliedJobs: { title: string; company: string; location?: string }[];
   currentStrategy: string;
   jobsToAnalyze: Job[];
   analyses: JobAnalysis[];

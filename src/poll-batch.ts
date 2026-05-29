@@ -133,11 +133,19 @@ async function processBatch(
       patternsUpserted,
       tokensInput: tokenUsage.input,
       tokensOutput: tokenUsage.output,
+      tokensCacheCreation: tokenUsage.cacheCreation,
+      tokensCacheRead: tokenUsage.cacheRead,
     });
+    const totalCacheTokens = tokenUsage.cacheCreation + tokenUsage.cacheRead;
+    const cacheHitRate = totalCacheTokens > 0
+      ? Math.round((tokenUsage.cacheRead / totalCacheTokens) * 100)
+      : 0;
     logger.info('Agent run completed', {
       runId: batchRun.runId,
       cacheCreationTokens: tokenUsage.cacheCreation,
       cacheReadTokens: tokenUsage.cacheRead,
+      cacheActivated: tokenUsage.cacheRead > 0,
+      cacheHitRate: `${cacheHitRate}%`,
     });
   }
 
