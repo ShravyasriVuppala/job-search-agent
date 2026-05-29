@@ -1,5 +1,8 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import { logger } from '../utils/logger';
+
+// OID 1114 (TIMESTAMP) has no tz info — pg interprets it as local time; force UTC.
+types.setTypeParser(1114, (val: string) => new Date(val + '+0000'));
 
 let pool: Pool | null = null;
 
