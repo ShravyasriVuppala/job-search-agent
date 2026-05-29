@@ -9,6 +9,8 @@ export interface AgentRunMetrics {
   patternsUpserted: number;
   tokensInput: number;
   tokensOutput: number;
+  tokensCacheCreation: number;
+  tokensCacheRead: number;
 }
 
 export interface AgentRun {
@@ -25,6 +27,8 @@ export interface AgentRun {
   patternsUpserted: number;
   tokensInput: number;
   tokensOutput: number;
+  tokensCacheCreation: number;
+  tokensCacheRead: number;
   errorMessage?: string;
   createdAt: Date;
 }
@@ -51,8 +55,10 @@ export class AgentRunRepository {
            maybe_flagged = $5,
            skipped = $6,
            patterns_upserted = $7,
-           tokens_input = $8,
-           tokens_output = $9
+           tokens_input = tokens_input + $8,
+           tokens_output = tokens_output + $9,
+           tokens_cache_creation = tokens_cache_creation + $10,
+           tokens_cache_read = tokens_cache_read + $11
        WHERE id = $1`,
       [
         id,
@@ -64,7 +70,20 @@ export class AgentRunRepository {
         metrics.patternsUpserted,
         metrics.tokensInput,
         metrics.tokensOutput,
+        metrics.tokensCacheCreation,
+        metrics.tokensCacheRead,
       ],
+    );
+  }
+
+  async recordAssessTokens(id: string, tokensInput: number, tokensOutput: number): Promise<void> {
+    const pool = getPool();
+    await pool.query(
+      `UPDATE agent_runs
+       SET tokens_input = tokens_input + $2,
+           tokens_output = tokens_output + $3
+       WHERE id = $1`,
+      [id, tokensInput, tokensOutput],
     );
   }
 
@@ -97,6 +116,8 @@ export class AgentRunRepository {
       patterns_upserted: number;
       tokens_input: number;
       tokens_output: number;
+      tokens_cache_creation: number;
+      tokens_cache_read: number;
       error_message: string | null;
       created_at: Date;
     }>(
@@ -118,6 +139,8 @@ export class AgentRunRepository {
       patternsUpserted: r.patterns_upserted,
       tokensInput: r.tokens_input,
       tokensOutput: r.tokens_output,
+      tokensCacheCreation: r.tokens_cache_creation,
+      tokensCacheRead: r.tokens_cache_read,
       errorMessage: r.error_message ?? undefined,
       createdAt: r.created_at,
     }));

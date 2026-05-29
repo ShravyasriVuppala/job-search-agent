@@ -84,6 +84,7 @@ export class AutonomousAgent {
         if (jobs.length === 0) {
           logger.info('No new jobs to analyze — skipping batch submission');
           if (runId) {
+            const assessTokens = this.claudeService.getTokenUsage();
             await this.agentRunRepository?.completeRun(runId, {
               jobsFetched: fetched.length,
               jobsAnalyzed: 0,
@@ -91,8 +92,10 @@ export class AutonomousAgent {
               maybeFlagged: 0,
               skipped: 0,
               patternsUpserted: 0,
-              tokensInput: 0,
-              tokensOutput: 0,
+              tokensInput: assessTokens.input,
+              tokensOutput: assessTokens.output,
+              tokensCacheCreation: 0,
+              tokensCacheRead: 0,
             });
           }
           return;
@@ -100,6 +103,10 @@ export class AutonomousAgent {
         // Step 5 (BATCH): Submit all jobs to Anthropic Message Batches API and exit.
         // The poll-batch script will collect results, learn patterns, and complete the run.
         await this.submitBatch(jobs, context, runId, fetched.length);
+        if (runId) {
+          const assessTokens = this.claudeService.getTokenUsage();
+          await this.agentRunRepository?.recordAssessTokens(runId, assessTokens.input, assessTokens.output);
+        }
         logger.info('Batch submitted — agent exiting. Poller will complete this run.');
         return;
       }
@@ -110,7 +117,7 @@ export class AutonomousAgent {
       logger.info(`Analyzed ${analyses.length} jobs`);
 
       // Step 6: LEARN — Claude identifies patterns from today's results
-      const patterns = await this.learnPatterns(analyses, jobs);
+      const patterns = await this.learnPatterns(analyses, jobs, context.appliedJobs);
       logger.info(`Identified ${patterns.length} patterns`);
 
       // Step 7: STORE — persist results to DB
@@ -118,7 +125,7 @@ export class AutonomousAgent {
 
       if (runId) {
         const claudeTokens = this.claudeService.getTokenUsage();
-        const analysisTokens = this.claudeAnalysisService?.getTokenUsage() ?? { input: 0, output: 0 };
+        const analysisTokens = this.claudeAnalysisService?.getTokenUsage() ?? { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
         await this.agentRunRepository?.completeRun(runId, {
           jobsFetched: fetched.length,
           jobsAnalyzed: analyses.length,
@@ -128,10 +135,20 @@ export class AutonomousAgent {
           patternsUpserted: patterns.length,
           tokensInput: claudeTokens.input + analysisTokens.input,
           tokensOutput: claudeTokens.output + analysisTokens.output,
+          tokensCacheCreation: analysisTokens.cacheCreation,
+          tokensCacheRead: analysisTokens.cacheRead,
         });
+        const totalCacheTokens = analysisTokens.cacheCreation + analysisTokens.cacheRead;
+        const cacheHitRate = totalCacheTokens > 0
+          ? Math.round((analysisTokens.cacheRead / totalCacheTokens) * 100)
+          : 0;
         logger.info('Token usage for this run', {
           input: claudeTokens.input + analysisTokens.input,
           output: claudeTokens.output + analysisTokens.output,
+          cacheCreationTokens: analysisTokens.cacheCreation,
+          cacheReadTokens: analysisTokens.cacheRead,
+          cacheActivated: analysisTokens.cacheRead > 0,
+          cacheHitRate: `${cacheHitRate}%`,
         });
       }
 
@@ -146,9 +163,12 @@ export class AutonomousAgent {
   async observe(): Promise<RunningAgentContext> {
     const resume = agentContext.resume ?? (await this.loadResumeFromDb());
     const memory = await this.agentMemoryRepository.getAll();
+    const appRepo = new ApplicationRepository();
+    const appliedJobs = await appRepo.getRecentApplications(30).catch(() => []);
     return {
       resume,
       memory,
+      appliedJobs: appliedJobs.map((a) => ({ title: a.title, company: a.company, location: a.location ?? undefined })),
       currentStrategy: '',
       jobsToAnalyze: [],
       analyses: [],
@@ -267,6 +287,8 @@ Be concise (2-3 sentences).`;
       context.resume.redactedText,
       context.resume.metadata.yearsExperience ?? this.config.yearsExperience,
       this.config.preferredTechnicalStack,
+      context.memory,
+      context.appliedJobs,
       this.config.userContext || undefined,
       context.currentStrategy || undefined,
     );
@@ -293,6 +315,8 @@ Be concise (2-3 sentences).`;
             context.resume.redactedText,
             context.resume.metadata.yearsExperience ?? this.config.yearsExperience,
             this.config.preferredTechnicalStack,
+            context.memory,
+            context.appliedJobs,
             this.config.userContext || undefined,
             context.currentStrategy || undefined,
           );
@@ -424,15 +448,16 @@ Respond with ONLY valid JSON (no markdown):
     };
   }
 
-  async learnPatterns(analyses: JobAnalysis[], jobs: Job[]): Promise<Pick<AgentMemory, 'patternName' | 'patternType' | 'patternData' | 'confidenceScore' | 'observationCount'>[]> {
+  async learnPatterns(
+    analyses: JobAnalysis[],
+    jobs: Job[],
+    appliedJobs: { title: string; company: string; location?: string }[] = [],
+  ): Promise<Pick<AgentMemory, 'patternName' | 'patternType' | 'patternData' | 'confidenceScore' | 'observationCount'>[]> {
     if (analyses.length === 0) {
       logger.info('No analyses to learn from — skipping pattern learning');
       return [];
     }
 
-    // Fetch recent applied jobs — strongest learning signal (capped to avoid prompt bloat)
-    const appRepo = new ApplicationRepository();
-    const appliedJobs = await appRepo.getRecentApplications(30).catch(() => []);
     if (appliedJobs.length > 0) {
       logger.info(`Including ${appliedJobs.length} user-applied jobs as learning signal`);
     }
