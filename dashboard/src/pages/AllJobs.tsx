@@ -2,92 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RawJob } from '../types';
 import { getAllJobs, setJobInteraction } from '../services/api';
+import { Pagination } from '../components/Pagination';
+import { CategoryBadge } from '../components/CategoryBadge';
+import { SortableTh, SkeletonRow } from '../components/JobTableParts';
+import { formatDate, statusKey, statusOrder, type SortCol, type SortState } from '../utils/jobStatus';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  'auto-flag': 'Auto-flagged',
-  'maybe-flag': 'Maybe',
-  'needs-review': 'Review',
-  skip: 'Skip',
-  pending: 'Pending',
-};
-const STATUS_COLOR: Record<string, string> = {
-  'auto-flag': 'bg-green-100 text-green-700',
-  'maybe-flag': 'bg-yellow-100 text-yellow-700',
-  'needs-review': 'bg-orange-100 text-orange-700',
-  skip: 'bg-red-100 text-red-600',
-  pending: 'bg-gray-100 text-gray-500',
-};
-// Lower = higher priority for ascending sort
-const STATUS_ORDER: Record<string, number> = {
-  'auto-flag': 0,
-  'maybe-flag': 1,
-  'needs-review': 2,
-  pending: 3,
-  skip: 4,
-};
-
-function statusKey(job: RawJob): string {
-  return job.isAnalyzed ? (job.overallCategory ?? 'pending') : 'pending';
-}
-
-// ─── sub-components ──────────────────────────────────────────────────────────
-
-function StatusBadge({ job }: { job: RawJob }) {
-  const key = statusKey(job);
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[key] ?? 'bg-gray-100 text-gray-500'}`}>
-      {STATUS_LABEL[key] ?? key}
-    </span>
-  );
-}
-
-type SortCol = 'company' | 'title' | 'location' | 'postedAt' | 'status';
-
-function SortIcon({ col, sort }: { col: SortCol; sort: { col: SortCol; dir: 'asc' | 'desc' } }) {
-  if (sort.col !== col) {
-    return <span className="ml-1 text-gray-300 select-none">↕</span>;
-  }
-  return <span className="ml-1 text-blue-500 select-none">{sort.dir === 'asc' ? '↑' : '↓'}</span>;
-}
-
-function SortableTh({ col, label, sort, onSort }: {
-  col: SortCol;
-  label: string;
-  sort: { col: SortCol; dir: 'asc' | 'desc' };
-  onSort: (col: SortCol) => void;
-}) {
-  return (
-    <th
-      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-800 whitespace-nowrap"
-      onClick={() => onSort(col)}
-    >
-      {label}
-      <SortIcon col={col} sort={sort} />
-    </th>
-  );
-}
-
-function SkeletonRow() {
-  return (
-    <tr className="animate-pulse">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <td key={i} className="px-4 py-3">
-          <div className="h-4 bg-gray-100 rounded w-full" />
-        </td>
-      ))}
-    </tr>
-  );
-}
-
-// ─── main component ──────────────────────────────────────────────────────────
+const PAGE_SIZE = 10;
 
 export function AllJobs() {
   const navigate = useNavigate();
@@ -102,7 +22,10 @@ export function AllJobs() {
   const [showHidden, setShowHidden] = useState(false);
 
   // sort — default: newest first
-  const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'postedAt', dir: 'desc' });
+  const [sort, setSort] = useState<SortState>({ col: 'postedAt', dir: 'desc' });
+
+  // pagination
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     getAllJobs(500).then((data) => {
@@ -163,11 +86,22 @@ export function AllJobs() {
         const tb = b.postedAt ? new Date(b.postedAt).getTime() : 0;
         cmp = ta - tb;
       } else if (col === 'status') {
-        cmp = (STATUS_ORDER[statusKey(a)] ?? 99) - (STATUS_ORDER[statusKey(b)] ?? 99);
+        cmp = statusOrder(a) - statusOrder(b);
       }
       return cmp * mul;
     });
   }, [filtered, sort]);
+
+  // Filters/sort change which rows land on which page — reset to page 1 by adjusting
+  // state during render (React's recommended pattern) rather than in an effect.
+  const [prevSorted, setPrevSorted] = useState(sorted);
+  if (sorted !== prevSorted) {
+    setPrevSorted(sorted);
+    setPage(1);
+  }
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function toggleSort(col: SortCol) {
     setSort((prev) =>
@@ -185,32 +119,34 @@ export function AllJobs() {
       {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">All Fetched Jobs</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {isLoading ? 'Loading…' : `${sorted.length} of ${jobs.length} jobs`}
+          <h1 className="text-2xl font-bold text-heading">All fetched jobs</h1>
+          <p className="text-sm text-label mt-1">
+            {isLoading ? 'Loading…' : `${sorted.length} of ${jobs.length} jobs fetched`}
           </p>
         </div>
         <input
           type="search"
+          aria-label="Search company or title"
           placeholder="Search company or title…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-72 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+          className="w-full sm:w-72 px-3 py-2 text-sm bg-surface border border-subtle rounded-control text-heading placeholder-label focus:outline-none focus:ring-2 focus:ring-accent/40"
         />
       </div>
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Status pills */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 text-sm">
+        <div className="flex items-center gap-1 text-sm">
           {(['all', 'analyzed', 'pending'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
-              className={`px-3 py-1.5 rounded-md capitalize transition-colors ${
+              aria-pressed={statusFilter === f}
+              className={`px-3 py-1.5 rounded-pill capitalize transition-colors ${
                 statusFilter === f
-                  ? 'bg-white text-gray-900 shadow-sm font-medium'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-surface dark:bg-surface-2 text-heading font-medium shadow-sm dark:shadow-none'
+                  : 'text-label hover:text-heading'
               }`}
             >
               {f}
@@ -218,29 +154,35 @@ export function AllJobs() {
           ))}
         </div>
 
-        {/* Location dropdown */}
+        {/* Location pills */}
         {locationOptions.length > 1 && (
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 capitalize"
-          >
+          <div className="flex items-center gap-1 text-sm">
             {locationOptions.map((opt) => (
-              <option key={opt} value={opt} className="capitalize">
+              <button
+                key={opt}
+                onClick={() => setLocationFilter(opt)}
+                aria-pressed={locationFilter === opt}
+                className={`px-3 py-1.5 rounded-pill capitalize transition-colors ${
+                  locationFilter === opt
+                    ? 'bg-surface dark:bg-surface-2 text-heading font-medium shadow-sm dark:shadow-none'
+                    : 'text-label hover:text-heading'
+                }`}
+              >
                 {opt === 'all' ? 'All locations' : opt}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         )}
 
         {/* Show hidden toggle */}
         {hiddenCount > 0 && (
           <button
             onClick={() => setShowHidden((v) => !v)}
-            className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+            aria-pressed={showHidden}
+            className={`text-xs px-3 py-1.5 rounded-pill border transition-colors ${
               showHidden
-                ? 'border-gray-400 bg-gray-100 text-gray-700'
-                : 'border-gray-200 text-gray-400 hover:text-gray-600'
+                ? 'border-accent/40 bg-accent/10 text-accent'
+                : 'border-subtle bg-surface text-body hover:bg-surface-2 hover:text-heading'
             }`}
           >
             {showHidden ? `Hide hidden (${hiddenCount})` : `Show hidden (${hiddenCount})`}
@@ -251,7 +193,7 @@ export function AllJobs() {
         {(search || statusFilter !== 'all' || locationFilter !== 'all') && (
           <button
             onClick={() => { setSearch(''); setStatusFilter('all'); setLocationFilter('all'); }}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-accent hover:underline"
           >
             Clear filters
           </button>
@@ -259,81 +201,83 @@ export function AllJobs() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <div role="alert" className="bg-surface-2 border border-subtle rounded-card px-4 py-3 text-sm text-body">
           Failed to load jobs. Make sure the backend is running on port 3001.
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-surface rounded-card border border-subtle overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-subtle">
+            <thead className="bg-surface-2">
               <tr>
                 <SortableTh col="company"  label="Company"   {...sharedThProps} />
                 <SortableTh col="title"    label="Job Title"  {...sharedThProps} />
                 <SortableTh col="location" label="Location"  {...sharedThProps} />
                 <SortableTh col="postedAt" label="Posted On" {...sharedThProps} />
                 <SortableTh col="status"   label="Status"    {...sharedThProps} />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-label uppercase tracking-wide whitespace-nowrap">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-subtle">
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
                 : sorted.length === 0
                 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-400 text-sm">
+                    <td colSpan={6} className="px-4 py-12 text-center text-label text-sm">
                       No jobs match the current filters.
                     </td>
                   </tr>
                 )
-                : sorted.map((job) => (
+                : paged.map((job) => (
                   <tr
                     key={job.id}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${job.isNotInterested ? 'opacity-50' : ''}`}
+                    className={`hover:bg-surface-2 transition-colors cursor-pointer ${job.isNotInterested ? 'opacity-50' : ''}`}
                     onClick={() => navigate(`/job/${job.id}`)}
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[160px] truncate">
+                    <td className="px-4 py-3 text-sm font-medium text-heading max-w-[160px] truncate">
                       {job.company}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[260px]">
+                    <td className="px-4 py-3 text-sm text-body max-w-[260px]">
                       <span className="line-clamp-2">{job.title}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-3 text-sm text-label whitespace-nowrap">
                       {job.location ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-3 text-sm text-label whitespace-nowrap">
                       {formatDate(job.postedAt)}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge job={job} />
+                      <CategoryBadge category={statusKey(job)} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         <button
                           onClick={(e) => handleInteraction(e, job.id, 'saved', job.isSaved)}
-                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          aria-pressed={job.isSaved}
+                          className={`text-xs px-2 py-1 rounded-control border transition-colors ${
                             job.isSaved
-                              ? 'border-blue-300 bg-blue-50 text-blue-700'
-                              : 'border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-200'
+                              ? 'border-accent/40 bg-accent/10 text-accent'
+                              : 'border-subtle bg-surface text-body hover:bg-surface-2 hover:text-heading'
                           }`}
                         >
-                          {job.isSaved ? '✓ Saved' : 'Save'}
+                          {job.isSaved ? 'Saved' : 'Save'}
                         </button>
                         <button
                           onClick={(e) => handleInteraction(e, job.id, 'not_interested', job.isNotInterested)}
-                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          aria-pressed={job.isNotInterested}
+                          className={`text-xs px-2 py-1 rounded-control border transition-colors ${
                             job.isNotInterested
-                              ? 'border-gray-300 bg-gray-100 text-gray-500'
-                              : 'border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200'
+                              ? 'border-subtle bg-surface-2 text-body'
+                              : 'border-subtle bg-surface text-body hover:bg-surface-2 hover:text-heading'
                           }`}
                         >
                           {job.isNotInterested ? 'Unhide' : 'Hide'}
                         </button>
                         <button
-                          className="text-xs text-blue-600 hover:underline"
+                          className="text-xs text-accent hover:underline"
                           onClick={(e) => { e.stopPropagation(); navigate(`/job/${job.id}`); }}
                         >
                           Details
@@ -346,6 +290,11 @@ export function AllJobs() {
             </tbody>
           </table>
         </div>
+        {!isLoading && sorted.length > 0 && (
+          <div className="px-4 py-3 border-t border-subtle">
+            <Pagination page={page} pageCount={pageCount} onChange={setPage} />
+          </div>
+        )}
       </div>
     </div>
   );

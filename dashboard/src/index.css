@@ -1,10 +1,70 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design tokens ──────────────────────────────────────────────────────── */
+/* Semantic values live here, per mode. Components consume them only through */
+/* the @theme-generated utilities below — never a hardcoded hex in a component. */
+
+:root {
+  color-scheme: light;
+  --bg-base: #f2f0ea;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #eeece5;
+  --border-subtle: #e3e0d8;
+  --accent: #2f6b52;
+  --accent-strong: #24543f;
+  --accent-fg: #ffffff;
+  --text-heading: #1c1b18;
+  --text-body: #57534a;
+  --text-label: #6e6a5a;
+
+  --app-font-sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-base: #0a0f0d;
+  --bg-surface: #141b18;
+  --bg-surface-2: #1b2320;
+  --border-subtle: #232b27;
+  --accent: #a8d5c2;
+  --accent-strong: #93c9b2;
+  --accent-fg: #0a0f0d;
+  --text-heading: #f2f5f3;
+  --text-body: #a9b3ae;
+  --text-label: #808c86;
+}
+
+/* ── Tailwind theme mapping ─────────────────────────────────────────────── */
+/* Generates bg-base, bg-surface, bg-surface-2, border-subtle, bg-accent,    */
+/* text-accent-fg, text-heading, text-body, text-label, rounded-card, etc.  */
+
+@theme {
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface-2);
+  --color-subtle: var(--border-subtle);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-fg: var(--accent-fg);
+  --color-heading: var(--text-heading);
+  --color-body: var(--text-body);
+  --color-label: var(--text-label);
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+  --radius-control: 10px;
+
+  --font-sans: var(--app-font-sans);
+}
+
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f9fafb;
-  color: #111827;
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-body);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 #root {

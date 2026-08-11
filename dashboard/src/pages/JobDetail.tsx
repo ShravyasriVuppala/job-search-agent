@@ -9,7 +9,6 @@ export function JobDetail() {
   const navigate = useNavigate();
   const [item, setItem] = useState<JobDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [coverOpen, setCoverOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -28,18 +27,18 @@ export function JobDetail() {
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-8 animate-pulse space-y-4">
-        <div className="h-6 bg-gray-200 rounded w-1/2" />
-        <div className="h-4 bg-gray-100 rounded w-1/3" />
-        <div className="h-40 bg-gray-100 rounded" />
+        <div className="h-6 bg-surface-2 rounded w-1/2" />
+        <div className="h-4 bg-surface-2 rounded w-1/3" />
+        <div className="h-40 bg-surface-2 rounded" />
       </div>
     );
   }
 
   if (!item) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8 text-center text-gray-400">
+      <div className="max-w-3xl mx-auto px-4 py-8 text-center text-label">
         <p className="text-lg">Job not found.</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-blue-600 hover:underline text-sm">
+        <button onClick={() => navigate(-1)} className="mt-4 text-accent hover:underline text-sm">
           ← Back
         </button>
       </div>
@@ -70,59 +69,61 @@ export function JobDetail() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      <button onClick={() => navigate(-1)} className="text-sm text-blue-600 hover:underline">
+      <button onClick={() => navigate(-1)} className="text-sm text-accent hover:underline">
         ← Back
       </button>
 
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6 space-y-3">
+      <div className="bg-surface rounded-card border border-subtle p-6 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{job.title}</h1>
-            <p className="text-gray-500">{job.company}</p>
+            <h1 className="text-xl font-semibold text-heading">{job.title}</h1>
+            <p className="text-body">{job.company}</p>
           </div>
           {analysis ? (
             <CategoryBadge category={analysis.overallCategory} />
           ) : (
-            <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 font-medium">
+            <span className="text-xs px-2.5 py-1 rounded-pill bg-surface-2 text-label font-medium">
               Not analyzed
             </span>
           )}
         </div>
-        {job.location && <p className="text-sm text-gray-400">{job.location}</p>}
+        {job.location && <p className="text-sm text-label">{job.location}</p>}
 
         <div className="flex flex-wrap gap-3 pt-2">
           <a
             href={job.applyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-5 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+            className="px-5 py-2 bg-accent text-accent-fg text-sm font-medium rounded-control hover:bg-accent-strong transition-colors"
           >
-            Apply Now
+            Apply Now<span className="sr-only"> (opens in new tab)</span>
           </a>
           <button
             onClick={handleApply}
             disabled={applying || applied}
-            className="px-5 py-2 border border-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            className="px-5 py-2 border border-subtle bg-surface text-body text-sm rounded-control hover:bg-surface-2 disabled:opacity-50 transition-colors"
           >
             {applied ? 'Marked as Applied ✓' : applying ? 'Saving…' : 'Mark as Applied'}
           </button>
           <button
             onClick={handleToggleSaved}
-            className={`px-5 py-2 border text-sm rounded-md transition-colors ${
+            aria-pressed={isSaved}
+            className={`px-5 py-2 border text-sm rounded-control transition-colors ${
               isSaved
-                ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                ? 'border-accent/40 bg-accent/10 text-accent'
+                : 'border-subtle bg-surface text-body hover:bg-surface-2'
             }`}
           >
             {isSaved ? '✓ Saved' : 'Save Job'}
           </button>
           <button
             onClick={handleToggleNotInterested}
-            className={`px-5 py-2 border text-sm rounded-md transition-colors ${
+            aria-pressed={isNotInterested}
+            className={`px-5 py-2 border text-sm rounded-control transition-colors ${
               isNotInterested
-                ? 'border-gray-300 bg-gray-100 text-gray-500 hover:bg-gray-200'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                ? 'border-red-200 bg-red-100 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300'
+                : 'border-subtle bg-surface text-body hover:bg-surface-2'
             }`}
           >
             {isNotInterested ? 'Undo Hide' : 'Not Interested'}
@@ -132,9 +133,9 @@ export function JobDetail() {
 
       {/* Job Description */}
       {job.description && (
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-800">Job Description</h2>
-          <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+        <div className="bg-surface rounded-card border border-subtle p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-heading">Job Description</h2>
+          <div className="text-sm text-body whitespace-pre-wrap leading-relaxed">
             {job.description}
           </div>
         </div>
@@ -142,40 +143,40 @@ export function JobDetail() {
 
       {/* Claude Analysis */}
       {analysis ? (
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-gray-800">Claude Analysis</h2>
+        <div className="bg-surface rounded-card border border-subtle p-6 space-y-5">
+          <h2 className="text-lg font-semibold text-heading">Claude Analysis</h2>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-blue-700">{analysis.relevanceScore}%</p>
-              <p className="text-xs text-blue-500 mt-1">Relevance Score</p>
+            <div className="bg-surface-2 rounded-card p-4 text-center">
+              <p className="text-3xl font-semibold text-heading">{analysis.relevanceScore}%</p>
+              <p className="text-xs text-label mt-1">Relevance Score</p>
             </div>
-            <div className="bg-purple-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-purple-700">{analysis.interviewChance}%</p>
-              <p className="text-xs text-purple-500 mt-1">Interview Chance</p>
+            <div className="bg-surface-2 rounded-card p-4 text-center">
+              <p className="text-3xl font-semibold text-heading">{analysis.interviewChance}%</p>
+              <p className="text-xs text-label mt-1">Interview Chance</p>
             </div>
           </div>
 
           {analysis.relevanceReasoning && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Why It Matches</p>
-              <p className="text-sm text-gray-700">{analysis.relevanceReasoning}</p>
+              <p className="text-xs font-medium text-label uppercase tracking-wide mb-1">Why It Matches</p>
+              <p className="text-sm text-body">{analysis.relevanceReasoning}</p>
             </div>
           )}
 
           {analysis.insights && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Insights</p>
-              <p className="text-sm text-gray-700">{analysis.insights}</p>
+              <p className="text-xs font-medium text-label uppercase tracking-wide mb-1">Insights</p>
+              <p className="text-sm text-body">{analysis.insights}</p>
             </div>
           )}
 
           {analysis.matchedPatterns && analysis.matchedPatterns.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Matched Patterns</p>
+              <p className="text-xs font-medium text-label uppercase tracking-wide mb-2">Matched Patterns</p>
               <div className="flex flex-wrap gap-1.5">
                 {analysis.matchedPatterns.map((p) => (
-                  <span key={p} className="px-2.5 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700">
+                  <span key={p} className="px-2.5 py-0.5 rounded-pill text-xs bg-surface-2 text-body">
                     {p}
                   </span>
                 ))}
@@ -184,23 +185,19 @@ export function JobDetail() {
           )}
 
           {analysis.coverLetterDraft && (
-            <div>
-              <button
-                onClick={() => setCoverOpen(!coverOpen)}
-                className="text-sm text-blue-600 hover:underline"
-              >
-                {coverOpen ? '▾ Hide cover letter draft' : '▸ Show cover letter draft'}
-              </button>
-              {coverOpen && (
-                <pre className="mt-3 p-4 bg-gray-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                  {analysis.coverLetterDraft}
-                </pre>
-              )}
-            </div>
+            <details className="group">
+              <summary className="text-sm text-accent hover:underline cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <span className="group-open:hidden">▸ Show cover letter draft</span>
+                <span className="hidden group-open:inline">▾ Hide cover letter draft</span>
+              </summary>
+              <pre className="mt-3 p-4 bg-surface-2 rounded-card text-sm text-body whitespace-pre-wrap font-sans">
+                {analysis.coverLetterDraft}
+              </pre>
+            </details>
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center text-gray-400 space-y-1">
+        <div className="bg-surface rounded-card border border-subtle p-6 text-center text-label space-y-1">
           <p className="text-sm font-medium">Not yet analyzed</p>
           <p className="text-xs">This job will be scored on the next agent run.</p>
         </div>
@@ -208,20 +205,20 @@ export function JobDetail() {
 
       {/* Recruiter Info */}
       {(job.recruiterName || job.recruiterEmail || job.companySize || job.companyWebsite) && (
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-800">Recruiter / Company Info</h2>
+        <div className="bg-surface rounded-card border border-subtle p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-heading">Recruiter / Company Info</h2>
           <dl className="space-y-2 text-sm">
             {job.recruiterName && (
               <div className="flex gap-2">
-                <dt className="text-gray-400 w-32 shrink-0">Recruiter</dt>
-                <dd className="text-gray-700">{job.recruiterName}</dd>
+                <dt className="text-label w-32 shrink-0">Recruiter</dt>
+                <dd className="text-body">{job.recruiterName}</dd>
               </div>
             )}
             {job.recruiterEmail && (
               <div className="flex gap-2">
-                <dt className="text-gray-400 w-32 shrink-0">Email</dt>
+                <dt className="text-label w-32 shrink-0">Email</dt>
                 <dd>
-                  <a href={`mailto:${job.recruiterEmail}`} className="text-blue-600 hover:underline">
+                  <a href={`mailto:${job.recruiterEmail}`} className="text-accent hover:underline">
                     {job.recruiterEmail}
                   </a>
                 </dd>
@@ -229,26 +226,26 @@ export function JobDetail() {
             )}
             {job.companySize && (
               <div className="flex gap-2">
-                <dt className="text-gray-400 w-32 shrink-0">Company Size</dt>
-                <dd className="text-gray-700">{job.companySize}</dd>
+                <dt className="text-label w-32 shrink-0">Company Size</dt>
+                <dd className="text-body">{job.companySize}</dd>
               </div>
             )}
             {job.companyWebsite && (
               <div className="flex gap-2">
-                <dt className="text-gray-400 w-32 shrink-0">Website</dt>
+                <dt className="text-label w-32 shrink-0">Website</dt>
                 <dd>
-                  <a href={job.companyWebsite} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    {job.companyWebsite}
+                  <a href={job.companyWebsite} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                    {job.companyWebsite}<span className="sr-only"> (opens in new tab)</span>
                   </a>
                 </dd>
               </div>
             )}
             {job.companyHiringUrl && (
               <div className="flex gap-2">
-                <dt className="text-gray-400 w-32 shrink-0">Hiring Page</dt>
+                <dt className="text-label w-32 shrink-0">Hiring Page</dt>
                 <dd>
-                  <a href={job.companyHiringUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    View careers page
+                  <a href={job.companyHiringUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                    View careers page<span className="sr-only"> (opens in new tab)</span>
                   </a>
                 </dd>
               </div>
