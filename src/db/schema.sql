@@ -41,11 +41,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_resume_metadata_current
 CREATE TABLE IF NOT EXISTS jobs (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   source           VARCHAR(50) NOT NULL,
-  external_id      VARCHAR(255) NOT NULL,
-  title            VARCHAR(255) NOT NULL,
-  company          VARCHAR(255) NOT NULL,
+  external_id      TEXT        NOT NULL, -- JSearch job_id can exceed 255 chars (opaque encoded token)
+  title            TEXT        NOT NULL,
+  company          TEXT        NOT NULL,
   description      TEXT        NOT NULL,
-  location         VARCHAR(255),
+  location         TEXT,
   location_category VARCHAR(50),
   salary_min       INTEGER,
   salary_max       INTEGER,
@@ -56,22 +56,40 @@ CREATE TABLE IF NOT EXISTS jobs (
   is_active        BOOLEAN     NOT NULL DEFAULT TRUE,
 
   -- Recruiter / company info (from JSearch API, all nullable)
-  recruiter_name   VARCHAR(255),
-  recruiter_email  VARCHAR(255),
+  -- Free text sourced from a third-party API with no length guarantee — TEXT, not VARCHAR,
+  -- to match apply_url/company_hiring_url and avoid rejecting an otherwise-valid batch (see
+  -- fix/job-insert-varchar-overflow: one oversized field failed the whole saveJobs() batch).
+  recruiter_name   TEXT,
+  recruiter_email  TEXT,
   company_hiring_url TEXT,
   company_size     VARCHAR(50),
-  company_website  VARCHAR(255),
+  company_website  TEXT,
 
   created_at       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- For existing databases, run:
--- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_name VARCHAR(255);
--- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_email VARCHAR(255);
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_name TEXT;
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_email TEXT;
 -- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_hiring_url TEXT;
 -- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_size VARCHAR(50);
--- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_website VARCHAR(255);
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_website TEXT;
+
+-- fix/job-insert-varchar-overflow: widen columns populated from external API free text
+-- (VARCHAR(255) was silently failing the entire fetch batch when JSearch returned an
+-- oversized title/company/location/recruiter/website value):
+-- ALTER TABLE jobs ALTER COLUMN title TYPE TEXT;
+-- ALTER TABLE jobs ALTER COLUMN company TYPE TEXT;
+-- ALTER TABLE jobs ALTER COLUMN location TYPE TEXT;
+-- ALTER TABLE jobs ALTER COLUMN recruiter_name TYPE TEXT;
+-- ALTER TABLE jobs ALTER COLUMN recruiter_email TYPE TEXT;
+-- ALTER TABLE jobs ALTER COLUMN company_website TYPE TEXT;
+--
+-- Follow-up: the actual field JSearch was overflowing turned out to be external_id
+-- (job_id), not the columns above — its opaque encoded token regularly exceeds 255
+-- chars. Confirmed via the per-job error logging added in the same fix:
+-- ALTER TABLE jobs ALTER COLUMN external_id TYPE TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_source_external_id
   ON jobs (source, external_id);
