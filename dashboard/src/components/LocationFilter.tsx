@@ -4,7 +4,7 @@ interface Props {
 }
 
 const options = [
-  { value: 'all', label: 'All Locations' },
+  { value: 'all', label: 'All locations' },
   { value: 'remote', label: 'Remote' },
   { value: 'washington', label: 'Washington' },
   { value: 'other', label: 'Other' },
@@ -17,10 +17,11 @@ export function LocationFilter({ selected, onChange }: Props) {
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          aria-pressed={selected === opt.value}
+          className={`px-4 py-1.5 rounded-pill text-sm font-medium transition-colors ${
             selected === opt.value
-              ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300'
+              ? 'bg-surface dark:bg-surface-2 text-heading shadow-sm dark:shadow-none'
+              : 'text-label hover:text-heading'
           }`}
         >
           {opt.label}

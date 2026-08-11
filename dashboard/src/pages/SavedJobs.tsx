@@ -2,83 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RawJob } from '../types';
 import { getSavedJobs, setJobInteraction } from '../services/api';
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  'auto-flag': 'Auto-flagged',
-  'maybe-flag': 'Maybe',
-  'needs-review': 'Review',
-  skip: 'Skip',
-  pending: 'Pending',
-};
-const STATUS_COLOR: Record<string, string> = {
-  'auto-flag': 'bg-green-100 text-green-700',
-  'maybe-flag': 'bg-yellow-100 text-yellow-700',
-  'needs-review': 'bg-orange-100 text-orange-700',
-  skip: 'bg-red-100 text-red-600',
-  pending: 'bg-gray-100 text-gray-500',
-};
-const STATUS_ORDER: Record<string, number> = {
-  'auto-flag': 0,
-  'maybe-flag': 1,
-  'needs-review': 2,
-  pending: 3,
-  skip: 4,
-};
-
-function statusKey(job: RawJob): string {
-  return job.isAnalyzed ? (job.overallCategory ?? 'pending') : 'pending';
-}
-
-function StatusBadge({ job }: { job: RawJob }) {
-  const key = statusKey(job);
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[key] ?? 'bg-gray-100 text-gray-500'}`}>
-      {STATUS_LABEL[key] ?? key}
-    </span>
-  );
-}
-
-type SortCol = 'company' | 'title' | 'location' | 'postedAt' | 'status';
-
-function SortIcon({ col, sort }: { col: SortCol; sort: { col: SortCol; dir: 'asc' | 'desc' } }) {
-  if (sort.col !== col) return <span className="ml-1 text-gray-300 select-none">↕</span>;
-  return <span className="ml-1 text-blue-500 select-none">{sort.dir === 'asc' ? '↑' : '↓'}</span>;
-}
-
-function SortableTh({ col, label, sort, onSort }: {
-  col: SortCol; label: string;
-  sort: { col: SortCol; dir: 'asc' | 'desc' };
-  onSort: (col: SortCol) => void;
-}) {
-  return (
-    <th
-      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-800 whitespace-nowrap"
-      onClick={() => onSort(col)}
-    >
-      {label}<SortIcon col={col} sort={sort} />
-    </th>
-  );
-}
-
-function SkeletonRow() {
-  return (
-    <tr className="animate-pulse">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <td key={i} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-full" /></td>
-      ))}
-    </tr>
-  );
-}
-
-// ─── main component ──────────────────────────────────────────────────────────
+import { CategoryBadge } from '../components/CategoryBadge';
+import { SortableTh, SkeletonRow } from '../components/JobTableParts';
+import { formatDate, statusKey, statusOrder, type SortCol, type SortState } from '../utils/jobStatus';
 
 export function SavedJobs() {
   const navigate = useNavigate();
@@ -88,7 +14,7 @@ export function SavedJobs() {
 
   const [search, setSearch] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
-  const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' }>({ col: 'postedAt', dir: 'desc' });
+  const [sort, setSort] = useState<SortState>({ col: 'postedAt', dir: 'desc' });
 
   useEffect(() => {
     getSavedJobs(500).then((data) => {
@@ -146,7 +72,7 @@ export function SavedJobs() {
         const tb = b.postedAt ? new Date(b.postedAt).getTime() : 0;
         cmp = ta - tb;
       } else if (col === 'status') {
-        cmp = (STATUS_ORDER[statusKey(a)] ?? 99) - (STATUS_ORDER[statusKey(b)] ?? 99);
+        cmp = statusOrder(a) - statusOrder(b);
       }
       return cmp * mul;
     });
@@ -165,38 +91,44 @@ export function SavedJobs() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Saved Jobs</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-heading">Saved Jobs</h1>
+          <p className="text-sm text-label mt-1">
             {isLoading ? 'Loading…' : `${sorted.length} of ${jobs.length} saved`}
           </p>
         </div>
         <input
           type="search"
+          aria-label="Search company or title"
           placeholder="Search company or title…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-72 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+          className="w-full sm:w-72 px-3 py-2 text-sm bg-surface border border-subtle rounded-control text-heading placeholder-label focus:outline-none focus:ring-2 focus:ring-accent/40"
         />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         {locationOptions.length > 1 && (
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 capitalize"
-          >
+          <div className="flex items-center gap-1 text-sm">
             {locationOptions.map((opt) => (
-              <option key={opt} value={opt} className="capitalize">
+              <button
+                key={opt}
+                onClick={() => setLocationFilter(opt)}
+                aria-pressed={locationFilter === opt}
+                className={`px-3 py-1.5 rounded-pill capitalize transition-colors ${
+                  locationFilter === opt
+                    ? 'bg-surface dark:bg-surface-2 text-heading font-medium shadow-sm dark:shadow-none'
+                    : 'text-label hover:text-heading'
+                }`}
+              >
                 {opt === 'all' ? 'All locations' : opt}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         )}
         {(search || locationFilter !== 'all') && (
           <button
             onClick={() => { setSearch(''); setLocationFilter('all'); }}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-accent hover:underline"
           >
             Clear filters
           </button>
@@ -204,31 +136,31 @@ export function SavedJobs() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+        <div role="alert" className="bg-surface-2 border border-subtle rounded-card px-4 py-3 text-sm text-body">
           Failed to load saved jobs. Make sure the backend is running on port 3001.
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-surface rounded-card border border-subtle overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-subtle">
+            <thead className="bg-surface-2">
               <tr>
                 <SortableTh col="company"  label="Company"   {...sharedThProps} />
                 <SortableTh col="title"    label="Job Title"  {...sharedThProps} />
                 <SortableTh col="location" label="Location"  {...sharedThProps} />
                 <SortableTh col="postedAt" label="Posted On" {...sharedThProps} />
                 <SortableTh col="status"   label="Status"    {...sharedThProps} />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-label uppercase tracking-wide whitespace-nowrap">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-subtle">
               {isLoading
                 ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
                 : sorted.length === 0
                 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-400 text-sm">
+                    <td colSpan={6} className="px-4 py-12 text-center text-label text-sm">
                       {jobs.length === 0 ? 'No saved jobs yet. Save jobs from All Jobs or a job detail page.' : 'No jobs match the current filters.'}
                     </td>
                   </tr>
@@ -236,36 +168,38 @@ export function SavedJobs() {
                 : sorted.map((job) => (
                   <tr
                     key={job.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="hover:bg-surface-2 transition-colors cursor-pointer"
                     onClick={() => navigate(`/job/${job.id}`)}
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[160px] truncate">{job.company}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[260px]">
+                    <td className="px-4 py-3 text-sm font-medium text-heading max-w-[160px] truncate">{job.company}</td>
+                    <td className="px-4 py-3 text-sm text-body max-w-[260px]">
                       <span className="line-clamp-2">{job.title}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{job.location ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(job.postedAt)}</td>
-                    <td className="px-4 py-3"><StatusBadge job={job} /></td>
+                    <td className="px-4 py-3 text-sm text-label whitespace-nowrap">{job.location ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-label whitespace-nowrap">{formatDate(job.postedAt)}</td>
+                    <td className="px-4 py-3"><CategoryBadge category={statusKey(job)} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         <button
                           onClick={(e) => handleInteraction(e, job.id, 'saved', job.isSaved)}
-                          className="text-xs px-2 py-1 rounded border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                          aria-pressed="true"
+                          className="text-xs px-2 py-1 rounded-control border border-accent/40 bg-accent/10 text-accent transition-colors"
                         >
                           ✓ Saved
                         </button>
                         <button
                           onClick={(e) => handleInteraction(e, job.id, 'not_interested', job.isNotInterested)}
-                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          aria-pressed={job.isNotInterested}
+                          className={`text-xs px-2 py-1 rounded-control border transition-colors ${
                             job.isNotInterested
-                              ? 'border-gray-300 bg-gray-100 text-gray-500'
-                              : 'border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200'
+                              ? 'border-subtle bg-surface-2 text-body'
+                              : 'border-subtle bg-surface text-body hover:bg-surface-2 hover:text-heading'
                           }`}
                         >
                           {job.isNotInterested ? 'Unhide' : 'Hide'}
                         </button>
                         <button
-                          className="text-xs text-blue-600 hover:underline"
+                          className="text-xs text-accent hover:underline"
                           onClick={(e) => { e.stopPropagation(); navigate(`/job/${job.id}`); }}
                         >
                           Details

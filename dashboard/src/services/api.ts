@@ -77,8 +77,29 @@ export async function getMaybeFlaggedJobs(): Promise<JobWithAnalysis[]> {
 }
 
 export async function getAllAnalyses(limit = 50, offset = 0): Promise<{ analyses: JobWithAnalysis[]; total: number }> {
-  const data = await request<{ analyses: JobWithAnalysis[] }>(`/analyses?limit=${limit}&offset=${offset}`);
-  return { analyses: data?.analyses ?? [], total: 0 };
+  try {
+    const res = await fetch(`${BASE_URL}/analyses?limit=${limit}&offset=${offset}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    return { analyses: json.data?.analyses ?? [], total: json.count ?? 0 };
+  } catch (err) {
+    console.error('API error [/analyses]:', err);
+    return { analyses: [], total: 0 };
+  }
+}
+
+// Fetches every page from /analyses (backend caps each page at 100) so the
+// dashboard can paginate client-side across the full set.
+export async function getAllAnalysesFull(): Promise<JobWithAnalysis[]> {
+  const pageSize = 100;
+  const first = await getAllAnalyses(pageSize, 0);
+  const all = [...first.analyses];
+  while (all.length < first.total) {
+    const next = await getAllAnalyses(pageSize, all.length);
+    if (next.analyses.length === 0) break;
+    all.push(...next.analyses);
+  }
+  return all;
 }
 
 export async function getJobDetail(jobId: string): Promise<JobDetail | null> {

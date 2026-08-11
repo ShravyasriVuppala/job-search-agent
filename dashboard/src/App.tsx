@@ -9,8 +9,8 @@ import { RunHistory } from './pages/RunHistory';
 
 function NotFound() {
   return (
-    <div className="text-center py-24 text-gray-400">
-      <p className="text-4xl font-bold mb-2">404</p>
+    <div className="text-center py-24 text-label">
+      <p className="text-4xl font-light mb-2 text-heading">404</p>
       <p className="text-lg">Page not found</p>
     </div>
   );

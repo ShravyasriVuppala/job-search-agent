@@ -9,13 +9,13 @@ interface Props {
 
 function Skeleton() {
   return (
-    <div className="bg-white rounded-lg shadow-md p-5 animate-pulse flex flex-col gap-3">
-      <div className="h-4 bg-gray-200 rounded w-3/4" />
-      <div className="h-3 bg-gray-200 rounded w-1/2" />
-      <div className="h-2 bg-gray-100 rounded-full" />
+    <div className="bg-surface rounded-card border border-subtle p-5 animate-pulse flex flex-col gap-3">
+      <div className="h-4 bg-surface-2 rounded w-3/4" />
+      <div className="h-3 bg-surface-2 rounded w-1/2" />
+      <div className="h-2 bg-surface-2 rounded-full" />
       <div className="flex gap-2 pt-1">
-        <div className="flex-1 h-8 bg-gray-100 rounded-md" />
-        <div className="flex-1 h-8 bg-gray-200 rounded-md" />
+        <div className="flex-1 h-8 bg-surface-2 rounded-control" />
+        <div className="flex-1 h-8 bg-surface-2 rounded-control" />
       </div>
     </div>
   );
@@ -32,7 +32,7 @@ export function JobList({ items, isLoading, emptyMessage = 'No jobs found.' }: P
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
+      <div className="text-center py-12 text-label">
         <p className="text-lg">{emptyMessage}</p>
       </div>
     );
