@@ -1,5 +1,6 @@
 import { getPool } from './client';
 import { Job } from '../types';
+import { logger } from '../utils/logger';
 
 export class JobRepository {
   async saveJobs(jobs: Job[]): Promise<void> {
@@ -39,9 +40,16 @@ export class JobRepository {
           ],
         );
       } catch (err: unknown) {
-        // 23505 = unique_violation — apply_url duplicate from a different source
+        // 23505 = unique_violation — apply_url duplicate from a different source; expected, not an error
         if ((err as { code?: string }).code === '23505') continue;
-        throw err;
+        // Any other failure (e.g. 22001 string_data_right_truncation from a malformed
+        // upstream API field) should cost this one job, not the whole fetch batch.
+        logger.error('Failed to save job — skipping', {
+          source: job.source,
+          externalId: job.externalId,
+          title: job.title.slice(0, 80),
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
