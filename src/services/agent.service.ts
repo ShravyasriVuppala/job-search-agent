@@ -321,28 +321,13 @@ Be concise (2-3 sentences).`;
             context.currentStrategy || undefined,
           );
 
-          let coverLetterDraft: string | undefined;
-          if (result.relevanceScore > 50) {
-            try {
-              const cl = await this.claudeAnalysisService.generateCoverLetter(
-                job,
-                result,
-                context.resume.redactedText,
-              );
-              coverLetterDraft = [cl.opening, cl.body, cl.closing].join('\n\n');
-            } catch (clErr) {
-              logger.warn(`Cover letter generation failed for "${job.title}" — skipping`, {
-                error: clErr instanceof Error ? clErr.message : String(clErr),
-              });
-            }
-          }
-
+          // Cover letters are generated on demand (POST /api/analyses/:jobId/cover-letter),
+          // not during the run — most are never used.
           if (this.claudeAnalysisRepository && job.id) {
             await this.claudeAnalysisRepository.saveAnalysis(
               job.id,
               result,
               job.locationCategory ?? 'other',
-              coverLetterDraft,
             );
           }
 
@@ -356,7 +341,7 @@ Be concise (2-3 sentences).`;
             relevance_reasoning: result.relevanceReasoning,
             insights: result.insights,
             matched_patterns: result.matchedPatterns,
-            cover_letter_draft: coverLetterDraft,
+            cover_letter_draft: undefined,
           };
         } else {
           analysis = await this.analyzeJob(job, context);

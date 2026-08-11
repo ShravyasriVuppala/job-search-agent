@@ -6,7 +6,6 @@ import { ClaudeAnalysisRepository } from './db/claude-analysis.repository';
 import { AgentMemoryRepository } from './db/agent-memory.repository';
 import { AgentRunRepository } from './db/agent-run.repository';
 import { ApplicationRepository } from './db/application.repository';
-import { ResumeRepository } from './db/resume.repository';
 import { ClaudeAnalysisService } from './services/claude-analysis.service';
 import { JobAnalysis } from './types';
 import { logger } from './utils/logger';
@@ -20,7 +19,6 @@ async function processBatch(
   agentRunRepository: AgentRunRepository,
   batchRunRepository: BatchRunRepository,
   appRepository: ApplicationRepository,
-  resumeRedactedText: string,
 ): Promise<void> {
   // 1. Check if Anthropic has finished processing
   const status = await claudeAnalysisService.checkBatchStatus(batchRun.batchId);
@@ -46,25 +44,13 @@ async function processBatch(
         return null;
       }
 
-      // Generate cover letter for relevant jobs — same threshold and prompt as sequential path
-      let coverLetterDraft: string | undefined;
-      if (analysis.relevanceScore > 50) {
-        try {
-          const cl = await claudeAnalysisService.generateCoverLetter(job, analysis, resumeRedactedText);
-          coverLetterDraft = [cl.opening, cl.body, cl.closing].join('\n\n');
-        } catch (clErr) {
-          logger.warn(`Cover letter generation failed for "${job.title}" — skipping`, {
-            error: clErr instanceof Error ? clErr.message : String(clErr),
-          });
-        }
-      }
-
+      // Cover letters are generated on demand (POST /api/analyses/:jobId/cover-letter),
+      // not during batch processing — most are never used.
       try {
         await claudeAnalysisRepository.saveAnalysis(
           jobId,
           analysis,
           job.locationCategory ?? 'other',
-          coverLetterDraft,
         );
       } catch (err) {
         logger.error(`Failed to save analysis for job ${jobId} — skipping`, {
@@ -83,7 +69,7 @@ async function processBatch(
         relevance_reasoning: analysis.relevanceReasoning,
         insights: analysis.insights,
         matched_patterns: analysis.matchedPatterns,
-        cover_letter_draft: coverLetterDraft,
+        cover_letter_draft: undefined,
       };
     }),
   );
@@ -171,13 +157,6 @@ async function main(): Promise<void> {
 
   logger.info(`Found ${pending.length} pending batch(es)`);
 
-  const resumeRepository = new ResumeRepository();
-  const resumeMeta = await resumeRepository.getResumeMetadata();
-  if (!resumeMeta) {
-    logger.error('No resume found in DB — cannot generate cover letters. Aborting.');
-    return;
-  }
-
   const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
   const jobRepository = new JobRepository();
   const claudeAnalysisRepository = new ClaudeAnalysisRepository();
@@ -197,7 +176,6 @@ async function main(): Promise<void> {
         agentRunRepository,
         batchRunRepository,
         appRepository,
-        resumeMeta.resumeRedacted,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

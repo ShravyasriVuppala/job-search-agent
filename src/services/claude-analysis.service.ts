@@ -116,22 +116,29 @@ export class ClaudeAnalysisService {
     };
   }
 
+  // Generated on demand (Task 3), grounded in the redacted résumé + this job's analysis.
+  // The `input` shape is deliberately narrow so callers don't have to reconstruct a full Job.
   async generateCoverLetter(
-    job: Job,
-    analysis: JobAnalysisResult,
+    input: { title: string; company: string; relevanceReasoning?: string; insights?: string },
     resume: string,
-    userName?: string,
+    focusPatterns: string[] = [],
   ): Promise<CoverLetterResult> {
-    const prompt = `Write a concise cover letter for this job application.
+    const focusLine = focusPatterns.length > 0
+      ? `\nEMPHASIZE THESE STRENGTHS: ${focusPatterns.slice(0, 5).join(', ')}`
+      : '';
+    const prompt = `Write a concise, specific cover letter for this job application, grounded in the applicant's actual background. Do not invent experience.
 
-${userName ? `APPLICANT: ${userName}\n` : ''}JOB: ${job.title} at ${job.company}
-STRENGTHS: ${analysis.relevanceReasoning}
-KEY INSIGHT: ${analysis.insights}
+JOB: ${input.title} at ${input.company}
+WHY IT FITS: ${input.relevanceReasoning ?? 'N/A'}
+KEY INSIGHT: ${input.insights ?? 'N/A'}${focusLine}
+
+APPLICANT RÉSUMÉ (redacted — no PII; draw only on experience shown here):
+${resume}
 
 Respond with ONLY valid JSON (no markdown):
 {
   "opening": "<one paragraph intro>",
-  "body": "<one paragraph highlighting match>",
+  "body": "<one paragraph tying the applicant's real experience to this role>",
   "closing": "<one sentence closing>"
 }`;
 

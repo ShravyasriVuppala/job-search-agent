@@ -40,6 +40,16 @@ export class ClaudeAnalysisRepository {
     );
   }
 
+  // Lazily persist a cover letter generated on demand (Task 3), leaving the rest of the
+  // analysis untouched.
+  async updateCoverLetter(jobId: string, draft: string): Promise<void> {
+    const pool = getPool();
+    await pool.query(
+      `UPDATE claude_analysis SET cover_letter_draft = $2 WHERE job_id = $1`,
+      [jobId, draft],
+    );
+  }
+
   async getAnalysesByCategory(category: string): Promise<ClaudeAnalysis[]> {
     const pool = getPool();
     const result = await pool.query(

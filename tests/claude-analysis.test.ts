@@ -101,6 +101,8 @@ describe('ClaudeAnalysisService', () => {
       'Senior Java engineer, 7 years, Kafka, Spring Boot',
       7,
       ['Java', 'Kafka', 'Spring Boot'],
+      [],
+      [],
     );
 
     expect(result.relevanceScore).toBe(88);
@@ -123,7 +125,7 @@ describe('ClaudeAnalysisService', () => {
       }),
     );
 
-    const result = await service.analyzeJob(makeJob(), 'Java engineer resume', 7, ['Java']);
+    const result = await service.analyzeJob(makeJob(), 'Java engineer resume', 7, ['Java'], [], []);
 
     expect(result.overallCategory).toBe('skip');
     expect(result.relevanceScore).toBe(22);
@@ -140,9 +142,10 @@ describe('ClaudeAnalysisService', () => {
       }),
     );
 
+    const job = makeJob();
+    const analysis = makeAnalysisResult();
     const result = await service.generateCoverLetter(
-      makeJob(),
-      makeAnalysisResult(),
+      { title: job.title, company: job.company, relevanceReasoning: analysis.relevanceReasoning, insights: analysis.insights },
       'Senior Java engineer, 7 years',
     );
 

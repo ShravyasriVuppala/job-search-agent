@@ -3,6 +3,7 @@ import { logger } from './utils/logger';
 import { getPool, testConnection, closePool } from './db/client';
 import { Server } from 'http';
 import { createApp } from './app';
+import { CoverLetterService } from './services/cover-letter.service';
 import { ResumeService } from './services/resume.service';
 import { ResumeChangeDetectionService } from './services/resume-change.service';
 import { TokenBudgetService } from './services/token-budget.service';
@@ -98,7 +99,8 @@ async function main(): Promise<void> {
 
     // Phase 7 will add the scheduler that calls agent.runDailyLoop() at 8 AM PT.
 
-    const app = createApp(config.locationPriority);
+    const coverLetterService = new CoverLetterService(claudeAnalysisService);
+    const app = createApp(config.locationPriority, coverLetterService);
     const port = parseInt(process.env['PORT'] ?? '3001', 10);
     const server: Server = app.listen(port, () => {
       logger.info(`REST API listening on port ${port}`);
