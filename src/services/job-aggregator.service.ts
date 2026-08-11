@@ -4,9 +4,46 @@ import { logger } from '../utils/logger';
 
 // If one API fails, continue with others.
 // Wrapping each fetch in .catch() ensures:
-// - JSearch down? HN + RemoteOK + AngelList still work
+// - JSearch down? Greenhouse + others still work
 // - Fetch returns 47 jobs instead of 50
 // - Agent continues with what it has (production-grade reliability)
+
+// Aggregators (job boards) return truncated descriptions and append tracking params to apply
+// URLs. ATS / direct-employer sources (Greenhouse, Lever, Ashby, Workday, ...) return the full
+// posting. On a dedup collision we keep the richer record — see preferredRecord().
+const AGGREGATOR_SOURCES = new Set(['jsearch', 'hackernews', 'remoteok', 'angellist']);
+
+function sourceRank(source: string): number {
+  // Higher = preferred. ATS / direct sources outrank aggregators.
+  return AGGREGATOR_SOURCES.has(source) ? 0 : 1;
+}
+
+// Normalize a field for the dedup key: lowercase, punctuation → spaces, collapse whitespace.
+function norm(value: string | undefined): string {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// The same role on a company ATS and on a job board has two different apply URLs, so a URL can't
+// be the dedup key. company | title | location-bucket identifies the underlying role.
+function dedupKey(job: Job): string {
+  return `${norm(job.company)}|${norm(job.title)}|${norm(job.locationCategory)}`;
+}
+
+// Strip the query string and fragment so tracking params (utm_*, gh_src, ref, ...) don't make the
+// same posting look like distinct URLs to the storage-level uniqueness checks.
+function canonicalUrl(url: string): string {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return url.split(/[?#]/)[0];
+  }
+}
 
 export class JobAggregatorService {
   constructor(
@@ -29,33 +66,42 @@ export class JobAggregatorService {
     const allJobs = results.flat();
     logger.info(`Fetched ${allJobs.length} jobs from ${this.fetchers.length} sources`);
 
-    // apply_url is the unique key. Same job posted on multiple platforms
-    // should appear once in DB (Map key ensures uniqueness).
-    // Cost savings: Don't analyze the same job multiple times.
+    // Location bucket and canonical apply URL both feed dedup, so compute them before deduping.
+    for (const job of allJobs) {
+      if (!job.locationCategory) {
+        job.locationCategory = this.categorizeLocation(job.location, criteria.locationKeywords);
+      }
+      if (job.applyUrl) {
+        job.applyUrl = canonicalUrl(job.applyUrl);
+      }
+    }
+
+    // Dedup on company | title | location-bucket. On collision, keep the richer record
+    // (ATS source over aggregator; fuller description as the tiebreak). Cost savings: the same
+    // role seen on multiple sources is analyzed once, and we keep the best copy of it.
     const deduped = new Map<string, Job>();
     for (const job of allJobs) {
-      if (job.applyUrl && !deduped.has(job.applyUrl)) {
-        deduped.set(job.applyUrl, job);
-      }
+      const key = dedupKey(job);
+      const existing = deduped.get(key);
+      deduped.set(key, existing ? this.preferredRecord(existing, job) : job);
     }
     const uniqueJobs = Array.from(deduped.values());
     logger.info(`Deduped: ${allJobs.length} jobs → ${uniqueJobs.length} unique`);
 
-    // Categorize jobs that weren't already tagged by their fetcher.
-    for (const job of uniqueJobs) {
-      if (!job.locationCategory) {
-        job.locationCategory = this.categorizeLocation(job.location, criteria.locationKeywords);
-      }
-    }
-
-    // Jobs fetched fresh daily (8 AM).
-    // ~50K tokens in context window per run.
-    // If we cached old jobs: context bloats, costs increase.
-    // Fresh jobs = clean, bounded context.
+    // Storage-level uniqueness is enforced by the (source, external_id) constraint in saveJobs.
     await this.jobRepository.saveJobs(uniqueJobs);
     logger.info(`Stored ${uniqueJobs.length} jobs in DB`);
 
     return uniqueJobs;
+  }
+
+  // Collision resolution: prefer an ATS/direct source over an aggregator (fuller description);
+  // when both are the same tier, prefer whichever description is longer.
+  private preferredRecord(a: Job, b: Job): Job {
+    const ra = sourceRank(a.source);
+    const rb = sourceRank(b.source);
+    if (ra !== rb) return ra > rb ? a : b;
+    return (a.description?.length ?? 0) >= (b.description?.length ?? 0) ? a : b;
   }
 
   categorizeLocation(location?: string, locationKeywords?: LocationKeywords): string {

@@ -362,15 +362,50 @@ describe('JobAggregatorService', () => {
     return new JobAggregatorService(fetchers as never, mockRepo);
   }
 
-  it('deduplicates jobs with the same apply_url across sources', async () => {
-    const sharedUrl = 'https://company.com/jobs/backend-engineer';
-    const fetcher1 = { fetch: jest.fn().mockResolvedValue([makeJob({ source: 'jsearch', applyUrl: sharedUrl })]) };
-    const fetcher2 = { fetch: jest.fn().mockResolvedValue([makeJob({ source: 'hackernews', applyUrl: sharedUrl })]) };
+  it('deduplicates the same role even when apply URLs differ across sources', async () => {
+    // Same company/title/location, different URLs (board vs ATS) → one record.
+    const fetcher1 = { fetch: jest.fn().mockResolvedValue([makeJob({ source: 'jsearch', applyUrl: 'https://board.com/jobs/be?utm_source=jsearch' })]) };
+    const fetcher2 = { fetch: jest.fn().mockResolvedValue([makeJob({ source: 'greenhouse', applyUrl: 'https://boards.greenhouse.io/acme/jobs/123' })]) };
 
     const aggregator = makeAggregator([fetcher1, fetcher2]);
     const jobs = await aggregator.fetchAndStoreJobs(criteria);
 
     expect(jobs).toHaveLength(1);
+  });
+
+  it('prefers the ATS-sourced record on a collision (fuller description)', async () => {
+    const jsearch = { fetch: jest.fn().mockResolvedValue([makeJob({ source: 'jsearch', description: 'short blurb' })]) };
+    const greenhouse = { fetch: jest.fn().mockResolvedValue([makeJob({ source: 'greenhouse', description: 'a much fuller description straight from the company ATS' })]) };
+
+    const aggregator = makeAggregator([jsearch, greenhouse]);
+    const jobs = await aggregator.fetchAndStoreJobs(criteria);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].source).toBe('greenhouse');
+    expect(jobs[0].description).toContain('fuller description');
+  });
+
+  it('keeps distinct roles that differ in title', async () => {
+    const fetcher = {
+      fetch: jest.fn().mockResolvedValue([
+        makeJob({ title: 'Senior Software Engineer' }),
+        makeJob({ title: 'Staff Software Engineer' }),
+      ]),
+    };
+
+    const aggregator = makeAggregator([fetcher]);
+    const jobs = await aggregator.fetchAndStoreJobs(criteria);
+
+    expect(jobs).toHaveLength(2);
+  });
+
+  it('canonicalizes apply URLs by stripping query strings', async () => {
+    const fetcher = { fetch: jest.fn().mockResolvedValue([makeJob({ applyUrl: 'https://acme.com/job/1?utm_source=x&ref=y#frag' })]) };
+
+    const aggregator = makeAggregator([fetcher]);
+    const jobs = await aggregator.fetchAndStoreJobs(criteria);
+
+    expect(jobs[0].applyUrl).toBe('https://acme.com/job/1');
   });
 
   it('categorizes locations correctly using config keywords', () => {
