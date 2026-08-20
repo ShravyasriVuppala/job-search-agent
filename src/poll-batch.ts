@@ -157,7 +157,7 @@ async function main(): Promise<void> {
 
   logger.info(`Found ${pending.length} pending batch(es)`);
 
-  const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
+  const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel, config.analysisDescMaxChars);
   const jobRepository = new JobRepository();
   const claudeAnalysisRepository = new ClaudeAnalysisRepository();
   const agentMemoryRepository = new AgentMemoryRepository();

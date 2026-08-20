@@ -6,6 +6,7 @@ export interface Config {
   claudeApiKey: string;
   claudeModel: string;
   claudeMaxTokens: number;
+  analysisDescMaxChars: number;
 
   // Mailgun
   mailgunApiKey: string;

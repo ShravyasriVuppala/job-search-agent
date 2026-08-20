@@ -26,13 +26,18 @@ export function htmlToText(html: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
-    .replace(/<[^>]+>/g, ' ') // strip tags
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '\n• ') // list items → bulleted lines
+    .replace(/<\/\s*(p|div|li|ul|ol|h[1-6]|tr|section|header)\s*>/gi, '\n') // block ends → newline
+    .replace(/<[^>]+>/g, ' ') // strip remaining tags
     .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&#39;|&#8217;|&#8216;|&rsquo;|&lsquo;/g, "'")
     .replace(/&quot;|&#8220;|&#8221;|&ldquo;|&rdquo;/g, '"')
     .replace(/&#8211;|&#8212;|&ndash;|&mdash;/g, '-')
     .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t]+/g, ' ') // collapse spaces/tabs but keep newlines
+    .replace(/ *\n */g, '\n') // trim spaces around newlines
+    .replace(/\n{3,}/g, '\n\n') // cap consecutive blank lines
     .trim();
 }
 

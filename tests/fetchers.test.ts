@@ -513,7 +513,9 @@ describe('GreenhouseFetcher', () => {
 
   it('htmlToText decodes escaped HTML, strips tags, and normalizes whitespace', () => {
     expect(htmlToText('&lt;p&gt;Hello&lt;/p&gt;')).toBe('Hello');
-    expect(htmlToText('&lt;ul&gt;&lt;li&gt;A&lt;/li&gt;  &lt;li&gt;B&lt;/li&gt;&lt;/ul&gt;')).toBe('A B');
+    const list = htmlToText('&lt;ul&gt;&lt;li&gt;A&lt;/li&gt;&lt;li&gt;B&lt;/li&gt;&lt;/ul&gt;');
+    expect(list).toContain('• A'); // list items become bulleted lines
+    expect(list).toContain('• B');
     expect(htmlToText('R&amp;D &amp; more')).toBe('R&D & more');
     expect(htmlToText('Ben&#8217;s &#8220;role&#8221; &#8211; remote')).toBe('Ben\'s "role" - remote');
     expect(htmlToText('')).toBe('');

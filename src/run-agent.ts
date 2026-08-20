@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     ],
     jobRepository,
   );
-  const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
+  const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel, config.analysisDescMaxChars);
   const claudeAnalysisRepository = new ClaudeAnalysisRepository();
   const agentRunRepository = new AgentRunRepository();
   const batchRunRepository = new BatchRunRepository();
