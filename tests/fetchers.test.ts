@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { JSearchFetcher } from '../src/services/job-fetchers/jsearch.fetcher';
+import { JSearchFetcher, capTerms } from '../src/services/job-fetchers/jsearch.fetcher';
+import type { JSearchConfig } from '../src/config/jsearch.config';
 import { HackerNewsAlgoliaFetcher } from '../src/services/job-fetchers/hackernews.fetcher';
 import { RemoteOKFetcher } from '../src/services/job-fetchers/remoteok.fetcher';
 import { AngelListFetcher } from '../src/services/job-fetchers/angelist.fetcher';
@@ -48,6 +49,21 @@ const criteria: SearchCriteria = {
   locationKeywords,
 };
 
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+// Test config: one location + cadence covering every day, so the response-parsing tests issue
+// exactly one query and never self-skip regardless of the day the suite runs.
+const jsearchConfig: JSearchConfig = {
+  cadence: [...DAY_NAMES],
+  datePosted: 'week',
+  maxRequestsPerRun: 15,
+  minReserve: 5,
+  locations: ['remote'],
+};
+
+// One title × one location = a single request, so a single mocked response maps to a single job.
+const singleTitleCriteria: SearchCriteria = { ...criteria, jobTitles: ['Senior Software Engineer'] };
+
 // ── JSearchFetcher ────────────────────────────────────────────────────────────
 
 describe('JSearchFetcher', () => {
@@ -72,8 +88,8 @@ describe('JSearchFetcher', () => {
       },
     });
 
-    const fetcher = new JSearchFetcher('test-api-key');
-    const jobs = await fetcher.fetch(criteria);
+    const fetcher = new JSearchFetcher('test-api-key', jsearchConfig);
+    const jobs = await fetcher.fetch(singleTitleCriteria);
 
     expect(jobs).toHaveLength(1);
     expect(jobs[0].source).toBe('jsearch');
@@ -108,8 +124,8 @@ describe('JSearchFetcher', () => {
       },
     });
 
-    const fetcher = new JSearchFetcher('test-api-key');
-    const jobs = await fetcher.fetch(criteria);
+    const fetcher = new JSearchFetcher('test-api-key', jsearchConfig);
+    const jobs = await fetcher.fetch(singleTitleCriteria);
 
     expect(jobs).toHaveLength(1);
     expect(jobs[0].recruiterName).toBe('John Smith');
@@ -136,8 +152,8 @@ describe('JSearchFetcher', () => {
       },
     });
 
-    const fetcher = new JSearchFetcher('test-api-key');
-    const jobs = await fetcher.fetch(criteria);
+    const fetcher = new JSearchFetcher('test-api-key', jsearchConfig);
+    const jobs = await fetcher.fetch(singleTitleCriteria);
 
     expect(jobs).toHaveLength(1);
     expect(jobs[0].recruiterName).toBeUndefined();
@@ -182,8 +198,8 @@ describe('JSearchFetcher', () => {
       },
     });
 
-    const fetcher = new JSearchFetcher('test-key');
-    const jobs = await fetcher.fetch(criteria);
+    const fetcher = new JSearchFetcher('test-key', jsearchConfig);
+    const jobs = await fetcher.fetch(singleTitleCriteria);
 
     expect(jobs).toHaveLength(3);
     expect(jobs.find((j) => j.externalId === 'j-remote')?.locationCategory).toBe('remote');
@@ -194,8 +210,8 @@ describe('JSearchFetcher', () => {
   it('returns [] and logs a warning on 429 rate limit', async () => {
     axiosGetSpy.mockRejectedValue(axiosError(429, 'Too Many Requests'));
 
-    const fetcher = new JSearchFetcher('test-api-key');
-    const jobs = await fetcher.fetch(criteria);
+    const fetcher = new JSearchFetcher('test-api-key', jsearchConfig);
+    const jobs = await fetcher.fetch(singleTitleCriteria);
 
     expect(jobs).toHaveLength(0);
   });
@@ -203,10 +219,70 @@ describe('JSearchFetcher', () => {
   it('returns [] and logs an error on network failure', async () => {
     axiosGetSpy.mockRejectedValue(new Error('ECONNREFUSED'));
 
-    const fetcher = new JSearchFetcher('test-api-key');
-    const jobs = await fetcher.fetch(criteria);
+    const fetcher = new JSearchFetcher('test-api-key', jsearchConfig);
+    const jobs = await fetcher.fetch(singleTitleCriteria);
 
     expect(jobs).toHaveLength(0);
+  });
+
+  it('issues one request per (title × location) pair', async () => {
+    axiosGetSpy.mockResolvedValue({ data: { data: { jobs: [] } }, headers: {} });
+    const config: JSearchConfig = { ...jsearchConfig, locations: ['remote', 'Seattle, WA'] };
+    const twoTitles: SearchCriteria = { ...criteria, jobTitles: ['A', 'B'] };
+
+    await new JSearchFetcher('k', config).fetch(twoTitles);
+
+    expect(axiosGetSpy).toHaveBeenCalledTimes(4); // 2 titles × 2 locations
+  });
+
+  it('self-skips on a day outside the cadence and issues no requests', async () => {
+    const today = DAY_NAMES[new Date().getDay()];
+    const config: JSearchConfig = { ...jsearchConfig, cadence: DAY_NAMES.filter((d) => d !== today) };
+
+    const jobs = await new JSearchFetcher('k', config).fetch(singleTitleCriteria);
+
+    expect(jobs).toHaveLength(0);
+    expect(axiosGetSpy).not.toHaveBeenCalled();
+  });
+
+  it('stops issuing queries once remaining quota drops below minReserve', async () => {
+    axiosGetSpy.mockResolvedValue({
+      data: { data: { jobs: [] } },
+      headers: { 'x-ratelimit-requests-remaining': '3' },
+    });
+    const config: JSearchConfig = { ...jsearchConfig, minReserve: 10, locations: ['remote', 'Seattle, WA', 'US'] };
+    const twoTitles: SearchCriteria = { ...criteria, jobTitles: ['A', 'B'] }; // matrix would be 2×3 = 6
+
+    await new JSearchFetcher('k', config).fetch(twoTitles);
+
+    expect(axiosGetSpy).toHaveBeenCalledTimes(1); // after call 1, remaining=3 < 10 → stop
+  });
+
+  it('capTerms keeps titles distinct up to 4, OR-ing any remainder', () => {
+    expect(capTerms(['A', 'B', 'C'], 4)).toEqual(['A', 'B', 'C']);
+    expect(capTerms(['A', 'B', 'C', 'D'], 4)).toEqual(['A', 'B', 'C', 'D']);
+    expect(capTerms(['A', 'B', 'C', 'D', 'E'], 4)).toEqual(['A', 'B', 'C', 'D OR E']);
+  });
+
+  it('capTerms caps locations at 3, OR-ing any remainder', () => {
+    expect(capTerms(['remote', 'Seattle', 'US'], 3)).toEqual(['remote', 'Seattle', 'US']);
+    expect(capTerms(['remote', 'Seattle', 'US', 'NYC'], 3)).toEqual(['remote', 'Seattle', 'US OR NYC']);
+  });
+
+  it('capTerms trims, drops blanks, and handles an empty list', () => {
+    expect(capTerms([], 4)).toEqual([]);
+    expect(capTerms(['  A ', '', '  '], 4)).toEqual(['A']);
+  });
+
+  it('accepts full weekday names and mixed case in the cadence', async () => {
+    axiosGetSpy.mockResolvedValue({ data: { data: { jobs: [] } }, headers: {} });
+    const fullNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayFull = fullNames[new Date().getDay()].toUpperCase();
+    const config: JSearchConfig = { ...jsearchConfig, cadence: [todayFull], locations: ['remote'] };
+
+    await new JSearchFetcher('k', config).fetch(singleTitleCriteria);
+
+    expect(axiosGetSpy).toHaveBeenCalled(); // did not self-skip despite the "MONDAY" form
   });
 });
 

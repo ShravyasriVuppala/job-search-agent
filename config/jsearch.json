@@ -1,0 +1,7 @@
+{
+  "cadence": ["mon", "wed", "fri"],
+  "datePosted": "week",
+  "maxRequestsPerRun": 15,
+  "minReserve": 20,
+  "locations": ["remote", "Seattle, WA", "US"]
+}

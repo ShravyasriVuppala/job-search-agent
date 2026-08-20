@@ -2,6 +2,7 @@ import { ClaudeAnalysisService } from './claude-analysis.service';
 import { ClaudeAnalysisQueryRepository, ClaudeAnalysisRepository } from '../db/claude-analysis.repository';
 import { ResumeRepository } from '../db/resume.repository';
 import { AgentMemoryRepository } from '../db/agent-memory.repository';
+import { logger } from '../utils/logger';
 
 // Cover letters are generated on demand rather than during the agent run (most are never used).
 // Because generation no longer happens while the run's context is in memory, this service
@@ -27,6 +28,10 @@ export class CoverLetterService {
       this.resumeRepo.getResumeMetadata(),
       this.memoryRepo.getAll(),
     ]);
+
+    if (!resumeMeta) {
+      logger.warn('No résumé in DB — generating cover letter without résumé context', { jobId });
+    }
 
     const focusPatterns = memory
       .filter((m) => m.patternName.startsWith('focus_'))

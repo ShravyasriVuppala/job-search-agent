@@ -9,6 +9,7 @@ import { AutonomousAgent } from './services/agent.service';
 import { JobAggregatorService } from './services/job-aggregator.service';
 import { ClaudeAnalysisService } from './services/claude-analysis.service';
 import { JSearchFetcher } from './services/job-fetchers/jsearch.fetcher';
+import { loadJSearchConfig } from './config/jsearch.config';
 import { ResumeRepository } from './db/resume.repository';
 import { AgentMemoryRepository } from './db/agent-memory.repository';
 import { JobRepository } from './db/job.repository';
@@ -62,7 +63,7 @@ async function main(): Promise<void> {
   const tokenBudget = new TokenBudgetService();
   const claudeService = new ClaudeService(config.claudeApiKey, config.claudeModel, config.claudeMaxTokens);
   const jobAggregator = new JobAggregatorService(
-    [new JSearchFetcher(config.rapidApiKey)],
+    [new JSearchFetcher(config.rapidApiKey, loadJSearchConfig())],
     jobRepository,
   );
   const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
