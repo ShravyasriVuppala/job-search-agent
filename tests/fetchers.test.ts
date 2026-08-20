@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { JSearchFetcher, capTerms } from '../src/services/job-fetchers/jsearch.fetcher';
+import { GreenhouseFetcher, titleMatches, htmlToText } from '../src/services/job-fetchers/greenhouse.fetcher';
 import type { JSearchConfig } from '../src/config/jsearch.config';
+import type { Company } from '../src/config/companies.config';
 import { HackerNewsAlgoliaFetcher } from '../src/services/job-fetchers/hackernews.fetcher';
 import { RemoteOKFetcher } from '../src/services/job-fetchers/remoteok.fetcher';
 import { AngelListFetcher } from '../src/services/job-fetchers/angelist.fetcher';
@@ -417,6 +419,106 @@ describe('AngelListFetcher', () => {
 });
 
 // ── JobAggregatorService ──────────────────────────────────────────────────────
+
+// ── GreenhouseFetcher ─────────────────────────────────────────────────────────
+
+describe('GreenhouseFetcher', () => {
+  const companies: Company[] = [{ name: 'Acme', provider: 'greenhouse', slug: 'acme' }];
+
+  function boardResponse(jobs: Record<string, unknown>[]) {
+    return { data: { jobs } };
+  }
+
+  it('normalizes a Greenhouse board response into Job objects', async () => {
+    axiosGetSpy.mockResolvedValue(boardResponse([
+      {
+        id: 900001,
+        title: 'Senior Software Engineer',
+        location: { name: 'Remote' },
+        content: '&lt;p&gt;Build &amp; scale systems&lt;/p&gt;',
+        absolute_url: 'https://boards.greenhouse.io/acme/jobs/900001',
+        updated_at: '2026-08-01T00:00:00Z',
+      },
+    ]));
+
+    const jobs = await new GreenhouseFetcher(companies, 0).fetch(criteria);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].source).toBe('greenhouse');
+    expect(jobs[0].externalId).toBe('900001');
+    expect(jobs[0].company).toBe('Acme');
+    expect(jobs[0].applyUrl).toBe('https://boards.greenhouse.io/acme/jobs/900001');
+    expect(jobs[0].description).toBe('Build & scale systems'); // HTML decoded + tags stripped
+    expect(jobs[0].locationCategory).toBeUndefined(); // aggregator buckets it later
+  });
+
+  it('filters out non-engineering roles by title', async () => {
+    axiosGetSpy.mockResolvedValue(boardResponse([
+      { id: 1, title: 'Staff Software Engineer', location: { name: 'Remote' }, content: 'x', absolute_url: 'u1' },
+      { id: 2, title: 'Account Executive', location: { name: 'NYC' }, content: 'x', absolute_url: 'u2' },
+      { id: 3, title: 'Technical Recruiter', location: { name: 'SF' }, content: 'x', absolute_url: 'u3' },
+    ]));
+
+    const jobs = await new GreenhouseFetcher(companies, 0).fetch(criteria);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].title).toBe('Staff Software Engineer');
+  });
+
+  it('skips a dead slug (404) and continues with the next board', async () => {
+    const twoCompanies: Company[] = [
+      { name: 'DeadCo', provider: 'greenhouse', slug: 'deadco' },
+      { name: 'Acme', provider: 'greenhouse', slug: 'acme' },
+    ];
+    axiosGetSpy
+      .mockRejectedValueOnce(axiosError(404, 'Not Found'))
+      .mockResolvedValueOnce(boardResponse([
+        { id: 7, title: 'Backend Engineer', location: { name: 'Remote' }, content: 'x', absolute_url: 'u' },
+      ]));
+
+    const jobs = await new GreenhouseFetcher(twoCompanies, 0).fetch(criteria);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].company).toBe('Acme');
+  });
+
+  it('processes only greenhouse-provider companies', async () => {
+    axiosGetSpy.mockResolvedValue(boardResponse([]));
+    const mixed: Company[] = [
+      { name: 'Acme', provider: 'greenhouse', slug: 'acme' },
+      { name: 'LeverCo', provider: 'lever', slug: 'leverco' },
+    ];
+
+    await new GreenhouseFetcher(mixed, 0).fetch(criteria);
+
+    expect(axiosGetSpy).toHaveBeenCalledTimes(1);
+    expect(String(axiosGetSpy.mock.calls[0][0])).toContain('/boards/acme/jobs');
+  });
+
+  it('returns [] when no companies are configured', async () => {
+    const jobs = await new GreenhouseFetcher([], 0).fetch(criteria);
+    expect(jobs).toHaveLength(0);
+    expect(axiosGetSpy).not.toHaveBeenCalled();
+  });
+
+  it('titleMatches scopes to engineering roles and configured title phrases', () => {
+    expect(titleMatches('Senior Software Engineer', [])).toBe(true);
+    expect(titleMatches('Backend Developer', [])).toBe(true);
+    expect(titleMatches('SDE II', [])).toBe(true);
+    expect(titleMatches('AI Engineer', [])).toBe(true);
+    expect(titleMatches('Account Executive', [])).toBe(false);
+    expect(titleMatches('Technical Recruiter', [])).toBe(false);
+    expect(titleMatches('Forward Deployed Specialist', ['Forward Deployed Specialist'])).toBe(true);
+  });
+
+  it('htmlToText decodes escaped HTML, strips tags, and normalizes whitespace', () => {
+    expect(htmlToText('&lt;p&gt;Hello&lt;/p&gt;')).toBe('Hello');
+    expect(htmlToText('&lt;ul&gt;&lt;li&gt;A&lt;/li&gt;  &lt;li&gt;B&lt;/li&gt;&lt;/ul&gt;')).toBe('A B');
+    expect(htmlToText('R&amp;D &amp; more')).toBe('R&D & more');
+    expect(htmlToText('Ben&#8217;s &#8220;role&#8221; &#8211; remote')).toBe('Ben\'s "role" - remote');
+    expect(htmlToText('')).toBe('');
+  });
+});
 
 describe('JobAggregatorService', () => {
   function makeJob(overrides: Partial<Job>): Job {

@@ -12,7 +12,9 @@ import { AutonomousAgent } from './services/agent.service';
 import { JobAggregatorService } from './services/job-aggregator.service';
 import { ClaudeAnalysisService } from './services/claude-analysis.service';
 import { JSearchFetcher } from './services/job-fetchers/jsearch.fetcher';
+import { GreenhouseFetcher } from './services/job-fetchers/greenhouse.fetcher';
 import { loadJSearchConfig } from './config/jsearch.config';
+import { loadCompanies } from './config/companies.config';
 // import { HackerNewsAlgoliaFetcher } from './services/job-fetchers/hackernews.fetcher';
 // import { RemoteOKFetcher } from './services/job-fetchers/remoteok.fetcher';
 // import { AngelListFetcher } from './services/job-fetchers/angelist.fetcher';
@@ -73,6 +75,7 @@ async function main(): Promise<void> {
     const jobAggregator = new JobAggregatorService(
       [
         new JSearchFetcher(config.rapidApiKey, loadJSearchConfig()),
+        new GreenhouseFetcher(loadCompanies()),
         // new HackerNewsAlgoliaFetcher(),
         // new RemoteOKFetcher(),
         // new AngelListFetcher(),
