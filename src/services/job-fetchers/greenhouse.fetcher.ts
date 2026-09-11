@@ -3,13 +3,29 @@ import { Job, JobFetcher, SearchCriteria } from '../../types';
 import { Company } from '../../config/companies.config';
 import { logger } from '../../utils/logger';
 
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
 const ENGINEERING_KEYWORDS = ['engineer', 'developer', 'software', 'programmer', 'architect'];
 
+// Roles that pass the "engineer" keyword but aren't the target IC backend/AI profile. Filtered out
+// at the source so an ATS board's whole-department listing doesn't spend the analysis budget on
+// jobs that would only be skipped. (Infra/platform/security/data/ML are intentionally NOT excluded
+// — Claude scores those on merit.)
+const EXCLUDE_TITLE: RegExp[] = [
+  /front[\s-]?end/, // frontend / front-end / front end
+  /\b(mobile|ios|android)\b/,
+  /\bmanager\b|\bmanagement\b/, // ICs only
+  /\b(intern|apprentice|associate|junior)\b/, // junior levels
+  /\b(engineer|swe|sde)\s+(ii|i|1|2)\b/, // Software Engineer I/II, etc.
+  /\b(field|solutions?|sales)\s+engineer\b/, // sales/field-adjacent ("forward deployed" is a target title, not excluded)
+];
+
 // Coarse scope filter for an ATS board, which lists every department (eng, sales, recruiting, …).
-// Keeps engineering-shaped roles plus anything matching a configured title phrase; Claude does the
-// fine-grained relevance scoring afterward. This is source scoping, not a ranking/triage stage.
+// Keeps engineering-shaped roles plus anything matching a configured title phrase, minus the
+// non-target roles above; Claude does the fine-grained relevance scoring afterward.
 export function titleMatches(title: string, jobTitles: string[]): boolean {
   const t = title.toLowerCase();
+  if (EXCLUDE_TITLE.some((re) => re.test(t))) return false;
   if (ENGINEERING_KEYWORDS.some((k) => t.includes(k))) return true;
   if (/\b(sde|swe)\b/.test(t)) return true;
   return jobTitles.some((jt) => {
@@ -41,6 +57,21 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+// US-only. JSearch is already country-scoped; Greenhouse boards list every geo, so filter here.
+// A US state abbreviation must follow a comma ("Bellevue, WA") to avoid matching words like "or".
+const US_STATE = /,\s*(a[klrz]|c[aot]|d[ce]|fl|ga|hi|i[adln]|k[sy]|la|m[adeinost]|n[cdehjmvy]|o[hkr]|pa|ri|s[cd]|t[nx]|ut|v[at]|w[aivy])\b/i;
+const US_SIGNAL = /\b(united states|u\.?s\.?a\.?|usa|remote[\s-]*us(a)?)\b/i;
+const NON_US =
+  /\b(canada|ontario|british columbia|quebec|alberta|toronto|vancouver|montreal|ottawa|calgary|united kingdom|\buk\b|england|scotland|wales|ireland|dublin|london|manchester|india|bangalore|bengaluru|mumbai|hyderabad|pune|delhi|chennai|noida|gurgaon|poland|warsaw|germany|berlin|munich|france|paris|spain|madrid|barcelona|italy|netherlands|amsterdam|portugal|lisbon|romania|bucharest|israel|tel aviv|singapore|australia|sydney|melbourne|japan|tokyo|china|shanghai|beijing|hong kong|korea|seoul|brazil|mexico|argentina|colombia|qatar|doha|dubai|abu dhabi|\buae\b|saudi|emea|apac|latam|europe)\b/i;
+
+// Keep unknown/plain "Remote" (ambiguous) and anything with a US signal; drop postings that name a
+// non-US place with no US location alongside (so "London, UK; San Francisco, CA" is kept).
+export function isUsLocation(location?: string): boolean {
+  if (!location) return true;
+  if (US_SIGNAL.test(location) || US_STATE.test(location)) return true;
+  return !NON_US.test(location);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -49,9 +80,19 @@ export class GreenhouseFetcher implements JobFetcher {
   constructor(
     private readonly companies: Company[],
     private readonly delayMs = 300,
+    // Weekdays reserved for the JSearch lane — Greenhouse skips these so each lane gets the full
+    // analysis budget on its own days (JSearch's quota-limited big-tech sweep vs Greenhouse's
+    // free full-description ATS pulls).
+    private readonly skipOnDays: string[] = [],
   ) {}
 
   async fetch(criteria: SearchCriteria): Promise<Job[]> {
+    const today = DAY_NAMES[new Date().getDay()];
+    if (this.skipOnDays.some((d) => d.trim().toLowerCase().slice(0, 3) === today)) {
+      logger.info(`Greenhouse: ${today} is a JSearch day — skipping so JSearch gets the full budget`);
+      return [];
+    }
+
     const boards = this.companies.filter((c) => c.provider === 'greenhouse' && c.slug.trim());
     if (boards.length === 0) {
       logger.info('Greenhouse: no companies configured — skipping');
@@ -81,7 +122,8 @@ export class GreenhouseFetcher implements JobFetcher {
         : [];
       const jobs = rawJobs
         .filter((raw) => titleMatches(String(raw.title ?? ''), criteria.jobTitles))
-        .map((raw) => this.mapJob(raw, company));
+        .map((raw) => this.mapJob(raw, company))
+        .filter((job) => isUsLocation(job.location)); // boards list every geo; keep US-based roles
 
       logger.info(`Greenhouse: ${company.name} → ${jobs.length} relevant of ${rawJobs.length} roles`);
       return jobs;

@@ -64,10 +64,12 @@ async function main(): Promise<void> {
   const jobRepository = new JobRepository();
   const tokenBudget = new TokenBudgetService();
   const claudeService = new ClaudeService(config.claudeApiKey, config.claudeModel, config.claudeMaxTokens);
+  const jsearchConfig = loadJSearchConfig();
   const jobAggregator = new JobAggregatorService(
     [
-      new JSearchFetcher(config.rapidApiKey, loadJSearchConfig()),
-      new GreenhouseFetcher(loadCompanies()),
+      new JSearchFetcher(config.rapidApiKey, jsearchConfig),
+      // Greenhouse runs on the days JSearch does not, so each lane gets the full analysis budget.
+      new GreenhouseFetcher(loadCompanies(), 300, jsearchConfig.cadence),
     ],
     jobRepository,
   );

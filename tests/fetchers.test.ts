@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { JSearchFetcher, capTerms } from '../src/services/job-fetchers/jsearch.fetcher';
-import { GreenhouseFetcher, titleMatches, htmlToText } from '../src/services/job-fetchers/greenhouse.fetcher';
+import { GreenhouseFetcher, titleMatches, htmlToText, isUsLocation } from '../src/services/job-fetchers/greenhouse.fetcher';
 import type { JSearchConfig } from '../src/config/jsearch.config';
 import type { Company } from '../src/config/companies.config';
 import { HackerNewsAlgoliaFetcher } from '../src/services/job-fetchers/hackernews.fetcher';
@@ -465,6 +465,36 @@ describe('GreenhouseFetcher', () => {
     expect(jobs[0].title).toBe('Staff Software Engineer');
   });
 
+  it('drops non-US roles and keeps US / ambiguous-remote ones', async () => {
+    axiosGetSpy.mockResolvedValue(boardResponse([
+      { id: 1, title: 'Software Engineer', location: { name: 'Bellevue, WA' }, content: 'x', absolute_url: 'u1' },
+      { id: 2, title: 'Software Engineer', location: { name: 'Remote - United States' }, content: 'x', absolute_url: 'u2' },
+      { id: 3, title: 'Software Engineer', location: { name: 'Remote' }, content: 'x', absolute_url: 'u3' }, // ambiguous → kept
+      { id: 4, title: 'Software Engineer', location: { name: 'London, UK; San Francisco, CA' }, content: 'x', absolute_url: 'u4' }, // has US → kept
+      { id: 5, title: 'Software Engineer', location: { name: 'Remote Poland' }, content: 'x', absolute_url: 'u5' },
+      { id: 6, title: 'Software Engineer', location: { name: 'Toronto, Canada' }, content: 'x', absolute_url: 'u6' },
+      { id: 7, title: 'Software Engineer', location: { name: 'Remote - United Kingdom' }, content: 'x', absolute_url: 'u7' },
+    ]));
+
+    const jobs = await new GreenhouseFetcher(companies, 0).fetch(criteria);
+
+    expect(jobs.map((j) => j.externalId).sort()).toEqual(['1', '2', '3', '4']);
+  });
+
+  it('classifies locations as US or non-US', () => {
+    expect(isUsLocation('Bellevue, WA')).toBe(true);
+    expect(isUsLocation('Menlo Park, CA; New York, NY')).toBe(true);
+    expect(isUsLocation('Remote - USA')).toBe(true);
+    expect(isUsLocation('Remote')).toBe(true); // ambiguous → keep
+    expect(isUsLocation(undefined)).toBe(true);
+    expect(isUsLocation('London, UK; San Francisco, CA')).toBe(true); // US option present
+    expect(isUsLocation('Remote Poland')).toBe(false);
+    expect(isUsLocation('Toronto, Canada')).toBe(false);
+    expect(isUsLocation('Remote - Ontario, Canada')).toBe(false);
+    expect(isUsLocation('Bangalore, India')).toBe(false);
+    expect(isUsLocation('Remote - United Kingdom')).toBe(false);
+  });
+
   it('skips a dead slug (404) and continues with the next board', async () => {
     const twoCompanies: Company[] = [
       { name: 'DeadCo', provider: 'greenhouse', slug: 'deadco' },
@@ -501,14 +531,30 @@ describe('GreenhouseFetcher', () => {
     expect(axiosGetSpy).not.toHaveBeenCalled();
   });
 
-  it('titleMatches scopes to engineering roles and configured title phrases', () => {
+  it('skips entirely on a reserved JSearch day and issues no requests', async () => {
+    const today = DAY_NAMES[new Date().getDay()];
+    const jobs = await new GreenhouseFetcher(companies, 0, [today]).fetch(criteria);
+    expect(jobs).toHaveLength(0);
+    expect(axiosGetSpy).not.toHaveBeenCalled();
+  });
+
+  it('titleMatches keeps target roles (incl. infra) and configured title phrases', () => {
     expect(titleMatches('Senior Software Engineer', [])).toBe(true);
-    expect(titleMatches('Backend Developer', [])).toBe(true);
-    expect(titleMatches('SDE II', [])).toBe(true);
+    expect(titleMatches('Staff Backend Engineer', [])).toBe(true);
     expect(titleMatches('AI Engineer', [])).toBe(true);
+    expect(titleMatches('Infrastructure Engineer', [])).toBe(true); // infra kept, not excluded
+    expect(titleMatches('Security Engineer', [])).toBe(true);
+    expect(titleMatches('Forward Deployed Engineer', ['Forward Deployed Engineer'])).toBe(true);
+  });
+
+  it('titleMatches excludes non-target roles at the source', () => {
+    expect(titleMatches('Senior Frontend Engineer', [])).toBe(false);
+    expect(titleMatches('Staff Android Engineer', [])).toBe(false);
+    expect(titleMatches('Engineering Manager', [])).toBe(false);
+    expect(titleMatches('Software Engineer II', [])).toBe(false);
+    expect(titleMatches('Solutions Engineer', [])).toBe(false);
     expect(titleMatches('Account Executive', [])).toBe(false);
     expect(titleMatches('Technical Recruiter', [])).toBe(false);
-    expect(titleMatches('Forward Deployed Specialist', ['Forward Deployed Specialist'])).toBe(true);
   });
 
   it('htmlToText decodes escaped HTML, strips tags, and normalizes whitespace', () => {

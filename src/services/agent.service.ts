@@ -236,8 +236,15 @@ Be concise (2-3 sentences).`;
     const caps = this.tokenBudget.locationCaps(this.config.locationPriority);
     if (caps.size === 0) return jobs.slice(0, this.tokenBudget.maxJobsPerRun);
 
-    // Pass 1: fill each category up to its cap; collect overflow for redistribution
+    // Cap any single source at 70% of the run only when the pool actually mixes sources (e.g. if
+    // the lane schedules ever overlap). On a single-lane day the one source takes the full budget.
+    const distinctSources = new Set(jobs.map((j) => j.source)).size;
+    const maxPerSource = distinctSources > 1 ? Math.ceil(this.tokenBudget.maxJobsPerRun * 0.7) : Infinity;
+
+    // Pass 1: fill each location up to its cap, respecting the per-source cap; overflow is
+    // redistributed in pass 2 (where the source cap is relaxed so budget isn't wasted).
     const counts = new Map<string, number>();
+    const sourceCounts = new Map<string, number>();
     const selected: Job[] = [];
     const overflow: Job[] = [];
 
@@ -246,15 +253,18 @@ Be concise (2-3 sentences).`;
       const loc = job.locationCategory ?? 'other';
       const cap = caps.get(loc) ?? 0;
       const count = counts.get(loc) ?? 0;
-      if (count < cap) {
+      const srcCount = sourceCounts.get(job.source) ?? 0;
+      if (count < cap && srcCount < maxPerSource) {
         selected.push(job);
         counts.set(loc, count + 1);
+        sourceCounts.set(job.source, srcCount + 1);
       } else {
         overflow.push(job);
       }
     }
 
     logger.info('Location caps for this run', Object.fromEntries(counts));
+    logger.info('Source mix for this run', Object.fromEntries(sourceCounts));
 
     // Pass 2: redistribute unused budget — fill remaining slots from overflow in priority order
     if (selected.length < this.tokenBudget.maxJobsPerRun && overflow.length > 0) {
