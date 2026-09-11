@@ -251,7 +251,11 @@ Be concise (2-3 sentences).`;
     for (const job of jobs) {
       if (selected.length >= this.tokenBudget.maxJobsPerRun) break;
       const loc = job.locationCategory ?? 'other';
-      const cap = caps.get(loc) ?? 0;
+      const cap = caps.get(loc);
+      // A location left out of LOCATION_PRIORITY entirely is excluded outright — it must never be
+      // analyzed, even to use up leftover budget in pass 2. (A configured location with a cap of 0
+      // from rounding is different: it still goes to overflow, since pass 2 may legitimately fill it.)
+      if (cap === undefined) continue;
       const count = counts.get(loc) ?? 0;
       const srcCount = sourceCounts.get(job.source) ?? 0;
       if (count < cap && srcCount < maxPerSource) {

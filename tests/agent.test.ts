@@ -5,6 +5,10 @@ import { ResumeRepository } from '../src/db/resume.repository';
 import { AgentMemoryRepository } from '../src/db/agent-memory.repository';
 import { RunningAgentContext, Job } from '../src/types';
 import { closePool } from '../src/db/client';
+import { logger } from '../src/utils/logger';
+
+// Matches TokenBudgetService's private safetyMargin (see its CONTEXT WINDOW BUDGET comment).
+const SAFETY_MARGIN = 150_000;
 
 afterAll(async () => {
   await closePool();
@@ -27,6 +31,7 @@ function makeContext(overrides: Partial<RunningAgentContext> = {}): RunningAgent
       },
     },
     memory: [],
+    appliedJobs: [],
     currentStrategy: 'Prioritize remote Java roles',
     jobsToAnalyze: [],
     analyses: [],
@@ -76,24 +81,35 @@ const fakeConfig = {
 // ── TokenBudgetService ────────────────────────────────────────────────────────
 
 describe('TokenBudgetService', () => {
-  it('returns true when total is within safety margin', () => {
+  it('validateForAnalysis() returns true when total is within the safety margin', () => {
     const budget = new TokenBudgetService();
-    expect(budget.validate()).toBe(true);
+    expect(budget.validateForAnalysis('short resume', [], [])).toBe(true);
   });
 
-  it('exposes a budget breakdown with correct buffer', () => {
+  it('validateForAnalysis() logs a budget breakdown with the correct buffer', () => {
+    const spy = jest.spyOn(logger, 'info');
     const budget = new TokenBudgetService();
-    const b = budget.getBudget();
-    expect(b.buffer).toBe(b.safetyMargin - b.resume - b.agentMemory - b.jobsToAnalyze);
-    expect(b.buffer).toBeGreaterThan(0);
+    budget.validateForAnalysis('Senior Software Engineer, 7 years, Java, Spring Boot, Kafka', [], []);
+
+    const call = spy.mock.calls.find(([message]) => message === 'Token budget validated');
+    expect(call).toBeDefined();
+    const context = call?.[1] as { total: number; buffer: number } | undefined;
+    expect(context?.buffer).toBe(SAFETY_MARGIN - (context?.total ?? 0));
+    expect(context?.buffer).toBeGreaterThan(0);
+    spy.mockRestore();
   });
 
-  it('logs budget info on validate()', () => {
-    const spy = jest.spyOn(process.stdout, 'write');
-    new TokenBudgetService().validate();
-    const output = spy.mock.calls.map((c) => c[0].toString()).join('');
-    expect(output).toContain('Token budget');
-    expect(output).toContain('buffer remaining');
+  it('validateForAnalysis() returns false and logs an error when the safety margin is exceeded', () => {
+    const spy = jest.spyOn(logger, 'error');
+    const budget = new TokenBudgetService();
+    // ~4 chars/token, so 700K chars ≈ 175K tokens — comfortably over the 150K margin.
+    const hugeJob = makeJob({ description: 'x'.repeat(700_000) });
+
+    expect(budget.validateForAnalysis('short resume', [], [hugeJob])).toBe(false);
+    expect(spy).toHaveBeenCalledWith(
+      'Token budget exceeded — aborting before Claude API calls',
+      expect.any(Object),
+    );
     spy.mockRestore();
   });
 
@@ -140,6 +156,7 @@ describe('ClaudeService', () => {
     const mockCreate = jest.fn().mockResolvedValue({
       content: [{ type: 'text', text: 'Strategy: focus on remote Java roles.' }],
       stop_reason: 'end_turn',
+      usage: { input_tokens: 42, output_tokens: 13 },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (service as any).client = { messages: { create: mockCreate } };
@@ -194,27 +211,29 @@ describe('AutonomousAgent', () => {
   it('runDailyLoop() validates token budget before any API call', async () => {
     const claude = makeMockClaudeService();
     const budget = new TokenBudgetService();
-    const validateSpy = jest.spyOn(budget, 'validate').mockReturnValue(true);
+    const validateSpy = jest.spyOn(budget, 'validateForAnalysis').mockReturnValue(true);
     const agent = new AutonomousAgent(fakeConfig, makeMockResumeRepo(), makeMockMemoryRepo(), claude, budget);
 
     await agent.runDailyLoop();
 
     expect(validateSpy).toHaveBeenCalledTimes(1);
-    // validate() is called before assess(), so call order matters
+    // validateForAnalysis() runs after assess() (which calls Claude for strategy) but strictly
+    // before any per-job analysis call, so call order still matters here.
     const validateOrder = validateSpy.mock.invocationCallOrder[0];
     const claudeCallOrder = (claude.call as jest.Mock).mock.invocationCallOrder[0];
-    expect(validateOrder).toBeLessThan(claudeCallOrder);
+    expect(validateOrder).toBeGreaterThan(claudeCallOrder);
   });
 
   it('runDailyLoop() halts immediately if token budget is exceeded', async () => {
     const claude = makeMockClaudeService();
     const budget = new TokenBudgetService();
-    jest.spyOn(budget, 'validate').mockReturnValue(false);
+    jest.spyOn(budget, 'validateForAnalysis').mockReturnValue(false);
     const agent = new AutonomousAgent(fakeConfig, makeMockResumeRepo(), makeMockMemoryRepo(), claude, budget);
 
     await agent.runDailyLoop();
 
-    expect(claude.call).not.toHaveBeenCalled();
+    // assess() still calls Claude once (for strategy); analyzeJobs() must never be reached.
+    expect(claude.call).toHaveBeenCalledTimes(1);
   });
 
   it('analyzeJobs() continues when one job fails, returning the rest', async () => {
