@@ -30,6 +30,46 @@ function extractJson<T>(text: string): T {
   return JSON.parse(match[0]) as T;
 }
 
+// Sections that signal fit — keep these and their content.
+const KEEP_SECTION = /^(responsibilities|what you.?ll do|what you will do|the role|about the role|role overview|requirements|qualifications|basic qualifications|minimum qualifications|preferred qualifications|what we.?re looking for|who you are|your (role|impact)|the opportunity|tech(nical)? (stack|requirements|skills)|skills|experience|you (will|have|bring)|nice to have|must have)/i;
+
+// Boilerplate that dilutes relevance scoring — drop these sections (usually trailing).
+const DROP_SECTION = /^(benefits|perks|what we offer|our benefits|life at|why (you.?ll |)(join|work)|compensation|salary( range)?|pay( range| transparency)?|total rewards|equal (employment )?opportunit|equal opportunity|diversity|inclusion|belonging|we are an equal|eeo|reasonable accommodation|accommodations?|e-?verify|background check|about (us|the company|the team|our)|our (company|team|culture))/i;
+
+// Trim a job description to the parts that signal fit — responsibilities, requirements,
+// qualifications, tech stack — dropping trailing boilerplate (benefits, EEO, diversity). Used only
+// in the dynamic (uncached) prompt block. Falls back to plain truncation for unstructured text.
+export function extractRelevantSections(description: string, maxChars: number): string {
+  if (!description) return '';
+
+  const lines = description.split(/\r?\n/);
+  const kept: string[] = [];
+  let dropping = false;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    const looksLikeHeader = line.length > 0 && line.length <= 60;
+    // Keep wins over drop, so "About the role" isn't caught by the "About us" rule.
+    if (looksLikeHeader && KEEP_SECTION.test(line)) {
+      dropping = false;
+      kept.push(line);
+      continue;
+    }
+    if (looksLikeHeader && DROP_SECTION.test(line)) {
+      dropping = true;
+      continue;
+    }
+    if (!dropping) kept.push(raw);
+  }
+
+  const extracted = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  // Only fall back to the original if extraction removed almost everything (a mis-fire on
+  // unstructured text) — not when a description is legitimately boilerplate-heavy.
+  const text = extracted.length < 80 && description.length > 400 ? description : extracted;
+
+  return text.slice(0, maxChars).trim();
+}
+
 export class ClaudeAnalysisService {
   private readonly client: Anthropic;
   private tokensInput = 0;
@@ -40,6 +80,7 @@ export class ClaudeAnalysisService {
   constructor(
     apiKey: string,
     private readonly model: string,
+    private readonly descMaxChars = 3500,
   ) {
     this.client = new Anthropic({ apiKey });
   }
@@ -116,29 +157,39 @@ export class ClaudeAnalysisService {
     };
   }
 
+  // Generated on demand (Task 3), grounded in the redacted résumé + this job's analysis.
+  // The `input` shape is deliberately narrow so callers don't have to reconstruct a full Job.
   async generateCoverLetter(
-    job: Job,
-    analysis: JobAnalysisResult,
+    input: { title: string; company: string; relevanceReasoning?: string; insights?: string },
     resume: string,
-    userName?: string,
+    focusPatterns: string[] = [],
   ): Promise<CoverLetterResult> {
-    const prompt = `Write a concise cover letter for this job application.
+    const focusLine = focusPatterns.length > 0
+      ? `\nEMPHASIZE THESE STRENGTHS: ${focusPatterns.slice(0, 5).join(', ')}`
+      : '';
+    const prompt = `Write a concise, specific cover letter for this job application, grounded in the applicant's actual background. Do not invent experience.
 
-${userName ? `APPLICANT: ${userName}\n` : ''}JOB: ${job.title} at ${job.company}
-STRENGTHS: ${analysis.relevanceReasoning}
-KEY INSIGHT: ${analysis.insights}
+JOB: ${input.title} at ${input.company}
+WHY IT FITS: ${input.relevanceReasoning ?? 'N/A'}
+KEY INSIGHT: ${input.insights ?? 'N/A'}${focusLine}
+
+APPLICANT RÉSUMÉ (redacted — no PII; draw only on experience shown here):
+${resume}
 
 Respond with ONLY valid JSON (no markdown):
 {
   "opening": "<one paragraph intro>",
-  "body": "<one paragraph highlighting match>",
+  "body": "<one paragraph tying the applicant's real experience to this role>",
   "closing": "<one sentence closing>"
 }`;
 
     const response = await withTimeout(
       this.client.messages.create({
         model: this.model,
-        max_tokens: 400,
+        // A real, detailed résumé pushes a grounded opening+body+closing past 400 tokens
+        // (observed: cut off mid-JSON at exactly 400, output_tokens hit the cap). 800 leaves
+        // comfortable headroom without materially changing cost.
+        max_tokens: 800,
         messages: [{ role: 'user', content: prompt }],
       }),
       CALL_TIMEOUT_MS,
@@ -289,7 +340,7 @@ Scoring guide:
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location ?? 'Not specified'}
-Description: ${job.description.slice(0, 1000)}`;
+Description: ${extractRelevantSections(job.description, this.descMaxChars)}`;
 
     return [
       { type: 'text', text: staticText, cache_control: { type: 'ephemeral' } },

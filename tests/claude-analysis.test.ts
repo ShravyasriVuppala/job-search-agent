@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ClaudeAnalysisService } from '../src/services/claude-analysis.service';
+import { ClaudeAnalysisService, extractRelevantSections } from '../src/services/claude-analysis.service';
 import { ClaudeAnalysisRepository } from '../src/db/claude-analysis.repository';
 import { Job, JobAnalysis, JobAnalysisResult } from '../src/types';
 import { getPool, closePool } from '../src/db/client';
@@ -101,6 +101,8 @@ describe('ClaudeAnalysisService', () => {
       'Senior Java engineer, 7 years, Kafka, Spring Boot',
       7,
       ['Java', 'Kafka', 'Spring Boot'],
+      [],
+      [],
     );
 
     expect(result.relevanceScore).toBe(88);
@@ -123,7 +125,7 @@ describe('ClaudeAnalysisService', () => {
       }),
     );
 
-    const result = await service.analyzeJob(makeJob(), 'Java engineer resume', 7, ['Java']);
+    const result = await service.analyzeJob(makeJob(), 'Java engineer resume', 7, ['Java'], [], []);
 
     expect(result.overallCategory).toBe('skip');
     expect(result.relevanceScore).toBe(22);
@@ -140,9 +142,10 @@ describe('ClaudeAnalysisService', () => {
       }),
     );
 
+    const job = makeJob();
+    const analysis = makeAnalysisResult();
     const result = await service.generateCoverLetter(
-      makeJob(),
-      makeAnalysisResult(),
+      { title: job.title, company: job.company, relevanceReasoning: analysis.relevanceReasoning, insights: analysis.insights },
       'Senior Java engineer, 7 years',
     );
 
@@ -232,5 +235,56 @@ describe('ClaudeAnalysisRepository', () => {
     expect(results).toHaveLength(1);
     expect(results[0].relevanceScore).toBe(85);
     expect(results[0].isStale).toBe(false);
+  });
+});
+describe('extractRelevantSections', () => {
+  it('drops trailing boilerplate (benefits, EEO) and keeps role content', () => {
+    const desc = [
+      'About the role',
+      'Build distributed systems at scale.',
+      'Requirements',
+      '5+ years of backend experience with Kafka and PostgreSQL.',
+      'Benefits',
+      'Free lunch, gym membership, unlimited PTO.',
+      'Equal Opportunity',
+      'We are an equal opportunity employer and value diversity.',
+    ].join('\n');
+
+    const out = extractRelevantSections(desc, 4000);
+
+    expect(out).toContain('distributed systems');
+    expect(out).toContain('Kafka and PostgreSQL');
+    expect(out).not.toContain('Free lunch');
+    expect(out).not.toContain('equal opportunity employer');
+  });
+
+  it('keeps "About the role" but drops "About us"', () => {
+    const desc = [
+      'About us',
+      'We are a fast-growing unicorn changing the world.',
+      'About the role',
+      'You will own the payments platform.',
+    ].join('\n');
+
+    const out = extractRelevantSections(desc, 4000);
+
+    expect(out).toContain('own the payments platform');
+    expect(out).not.toContain('changing the world');
+  });
+
+  it('caps output at maxChars', () => {
+    const desc = 'Requirements\n' + 'x'.repeat(5000);
+    expect(extractRelevantSections(desc, 1000).length).toBeLessThanOrEqual(1000);
+  });
+
+  it('truncates unstructured text at maxChars (fallback)', () => {
+    const blob = 'A single blob with no headers or structure whatsoever. '.repeat(20);
+    const out = extractRelevantSections(blob, 200);
+    expect(out.length).toBeLessThanOrEqual(200);
+    expect(out).toContain('single blob');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(extractRelevantSections('', 4000)).toBe('');
   });
 });

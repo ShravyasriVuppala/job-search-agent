@@ -71,6 +71,11 @@ export function validateAndLoadConfig(): Config {
     throw new Error('CLAUDE_MAX_TOKENS must be an integer between 1 and 32000');
   }
 
+  const analysisDescMaxChars = parseInt(optionalEnv('ANALYSIS_DESC_MAX_CHARS', '3500'), 10);
+  if (isNaN(analysisDescMaxChars) || analysisDescMaxChars < 500 || analysisDescMaxChars > 20_000) {
+    throw new Error('ANALYSIS_DESC_MAX_CHARS must be an integer between 500 and 20000');
+  }
+
   validateDatabaseUrl(databaseUrl);
   validateClaudeApiKey(claudeApiKey);
   validateEmail(recipientEmail);
@@ -110,6 +115,7 @@ export function validateAndLoadConfig(): Config {
     claudeApiKey,
     claudeModel,
     claudeMaxTokens,
+    analysisDescMaxChars,
     userContext: optionalEnv('USER_CONTEXT', ''),
     mailgunApiKey,
     mailgunDomain,

@@ -9,6 +9,9 @@ import { AutonomousAgent } from './services/agent.service';
 import { JobAggregatorService } from './services/job-aggregator.service';
 import { ClaudeAnalysisService } from './services/claude-analysis.service';
 import { JSearchFetcher } from './services/job-fetchers/jsearch.fetcher';
+import { GreenhouseFetcher } from './services/job-fetchers/greenhouse.fetcher';
+import { loadJSearchConfig } from './config/jsearch.config';
+import { loadCompanies } from './config/companies.config';
 import { ResumeRepository } from './db/resume.repository';
 import { AgentMemoryRepository } from './db/agent-memory.repository';
 import { JobRepository } from './db/job.repository';
@@ -61,11 +64,16 @@ async function main(): Promise<void> {
   const jobRepository = new JobRepository();
   const tokenBudget = new TokenBudgetService();
   const claudeService = new ClaudeService(config.claudeApiKey, config.claudeModel, config.claudeMaxTokens);
+  const jsearchConfig = loadJSearchConfig();
   const jobAggregator = new JobAggregatorService(
-    [new JSearchFetcher(config.rapidApiKey)],
+    [
+      new JSearchFetcher(config.rapidApiKey, jsearchConfig),
+      // Greenhouse runs on the days JSearch does not, so each lane gets the full analysis budget.
+      new GreenhouseFetcher(loadCompanies(), 300, jsearchConfig.cadence),
+    ],
     jobRepository,
   );
-  const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel);
+  const claudeAnalysisService = new ClaudeAnalysisService(config.claudeApiKey, config.claudeModel, config.analysisDescMaxChars);
   const claudeAnalysisRepository = new ClaudeAnalysisRepository();
   const agentRunRepository = new AgentRunRepository();
   const batchRunRepository = new BatchRunRepository();

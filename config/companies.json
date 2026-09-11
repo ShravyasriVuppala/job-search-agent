@@ -1,0 +1,16 @@
+[
+  { "name": "Anthropic", "provider": "greenhouse", "slug": "anthropic" },
+  { "name": "Scale AI", "provider": "greenhouse", "slug": "scaleai" },
+  { "name": "Together", "provider": "greenhouse", "slug": "togetherai" },
+  { "name": "Glean", "provider": "greenhouse", "slug": "gleanwork" },
+  { "name": "Affirm", "provider": "greenhouse", "slug": "affirm" },
+  { "name": "Coinbase", "provider": "greenhouse", "slug": "coinbase" },
+  { "name": "Brex", "provider": "greenhouse", "slug": "brex" },
+  { "name": "Robinhood", "provider": "greenhouse", "slug": "robinhood" },
+  { "name": "Oscar Health", "provider": "greenhouse", "slug": "oscar" },
+  { "name": "Cohere Health", "provider": "greenhouse", "slug": "coherehealth" },
+  { "name": "Reddit", "provider": "greenhouse", "slug": "reddit" },
+  { "name": "Instacart", "provider": "greenhouse", "slug": "instacart" },
+  { "name": "Figma", "provider": "greenhouse", "slug": "figma" },
+  { "name": "Discord", "provider": "greenhouse", "slug": "discord" }
+]

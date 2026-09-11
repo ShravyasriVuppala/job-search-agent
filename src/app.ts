@@ -4,10 +4,11 @@ import { errorHandler } from './middleware/errorHandler';
 import { createApiRouter } from './routes/index';
 import { getPool } from './db/client';
 import { logger } from './utils/logger';
+import { CoverLetterService } from './services/cover-letter.service';
 
 const startedAt = new Date();
 
-export function createApp(locationPriority: string[]): Application {
+export function createApp(locationPriority: string[], coverLetterService?: CoverLetterService): Application {
   const app = express();
 
   app.use(corsMiddleware);
@@ -29,7 +30,7 @@ export function createApp(locationPriority: string[]): Application {
     }
   });
 
-  app.use('/api', createApiRouter(locationPriority));
+  app.use('/api', createApiRouter(locationPriority, coverLetterService));
 
   app.use(errorHandler);
 

@@ -154,6 +154,14 @@ export async function recordApplication(jobId: string, coverLetterUsed?: string)
   });
 }
 
+// Generates the cover letter on first call and returns the stored draft on subsequent ones.
+export async function generateCoverLetter(jobId: string): Promise<string | null> {
+  const data = await request<{ coverLetterDraft: string }>(`/analyses/${jobId}/cover-letter`, {
+    method: 'POST',
+  });
+  return data?.coverLetterDraft ?? null;
+}
+
 // Backend route is PATCH /applications/:jobId (not application id — job id)
 export async function updateApplicationStatus(jobId: string, status: ApplicationStatus): Promise<Application | null> {
   return request<Application>(`/applications/${jobId}`, {

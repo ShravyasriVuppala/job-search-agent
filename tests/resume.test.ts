@@ -5,6 +5,7 @@ import { ResumeChangeDetectionService } from '../src/services/resume-change.serv
 import { ResumeRepository } from '../src/db/resume.repository';
 import { ResumeMetadata } from '../src/types';
 import { closePool } from '../src/db/client';
+import { errorMessage } from './helpers';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'sample-resume.txt');
 const FIXTURE_TEXT = fs.readFileSync(FIXTURE, 'utf8');
@@ -185,7 +186,7 @@ describe('ResumeRepository', () => {
       expect(retrieved?.technologies).toContain('Java');
       expect(retrieved?.isCurrent).toBe(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if (
         message.includes('ECONNREFUSED') ||
         message.includes('ETIMEDOUT') ||
@@ -217,7 +218,7 @@ describe('ResumeRepository', () => {
       );
       expect(parseInt(rows[0].count, 10)).toBe(1);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if (
         message.includes('ECONNREFUSED') ||
         message.includes('ETIMEDOUT') ||

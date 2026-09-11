@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { JobDetail } from '../types';
 import { CategoryBadge } from '../components/CategoryBadge';
-import { getJobDetail, recordApplication, setJobInteraction } from '../services/api';
+import { getJobDetail, recordApplication, setJobInteraction, generateCoverLetter } from '../services/api';
 
 export function JobDetail() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -13,6 +13,8 @@ export function JobDetail() {
   const [applied, setApplied] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isNotInterested, setIsNotInterested] = useState(false);
+  const [coverLetter, setCoverLetter] = useState<string | null>(null);
+  const [coverLetterLoading, setCoverLetterLoading] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
@@ -65,6 +67,16 @@ export function JobDetail() {
     const next = !isNotInterested;
     setIsNotInterested(next);
     await setJobInteraction(job.id, 'not_interested', next);
+  }
+
+  async function handleGenerateCoverLetter() {
+    setCoverLetterLoading(true);
+    try {
+      const draft = await generateCoverLetter(job.id);
+      if (draft) setCoverLetter(draft);
+    } finally {
+      setCoverLetterLoading(false);
+    }
   }
 
   return (
@@ -184,17 +196,28 @@ export function JobDetail() {
             </div>
           )}
 
-          {analysis.coverLetterDraft && (
-            <details className="group">
-              <summary className="text-sm text-accent hover:underline cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <span className="group-open:hidden">▸ Show cover letter draft</span>
-                <span className="hidden group-open:inline">▾ Hide cover letter draft</span>
-              </summary>
-              <pre className="mt-3 p-4 bg-surface-2 rounded-card text-sm text-body whitespace-pre-wrap font-sans">
-                {analysis.coverLetterDraft}
-              </pre>
-            </details>
-          )}
+          {(() => {
+            const draft = coverLetter ?? analysis.coverLetterDraft;
+            return draft ? (
+              <details className="group" open={Boolean(coverLetter)}>
+                <summary className="text-sm text-accent hover:underline cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <span className="group-open:hidden">▸ Show cover letter draft</span>
+                  <span className="hidden group-open:inline">▾ Hide cover letter draft</span>
+                </summary>
+                <pre className="mt-3 p-4 bg-surface-2 rounded-card text-sm text-body whitespace-pre-wrap font-sans">
+                  {draft}
+                </pre>
+              </details>
+            ) : (
+              <button
+                onClick={handleGenerateCoverLetter}
+                disabled={coverLetterLoading}
+                className="text-sm px-4 py-2 rounded-control border border-subtle bg-surface text-body hover:bg-surface-2 hover:text-heading disabled:opacity-50 transition-colors"
+              >
+                {coverLetterLoading ? 'Generating…' : 'Generate cover letter'}
+              </button>
+            );
+          })()}
         </div>
       ) : (
         <div className="bg-surface rounded-card border border-subtle p-6 text-center text-label space-y-1">
