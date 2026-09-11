@@ -1,6 +1,7 @@
 import { validateAndLoadConfig } from '../src/config/config';
 import { testConnection, closePool } from '../src/db/client';
 import { logger } from '../src/utils/logger';
+import { errorMessage } from './helpers';
 
 describe('Config', () => {
   it('loads and validates without error when all required vars are set', () => {
@@ -102,7 +103,7 @@ describe('Database', () => {
     try {
       await testConnection();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       // Skip gracefully when Postgres is not running locally
       if (
         message.includes('ECONNREFUSED') ||
