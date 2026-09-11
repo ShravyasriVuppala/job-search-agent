@@ -186,7 +186,10 @@ Respond with ONLY valid JSON (no markdown):
     const response = await withTimeout(
       this.client.messages.create({
         model: this.model,
-        max_tokens: 400,
+        // A real, detailed résumé pushes a grounded opening+body+closing past 400 tokens
+        // (observed: cut off mid-JSON at exactly 400, output_tokens hit the cap). 800 leaves
+        // comfortable headroom without materially changing cost.
+        max_tokens: 800,
         messages: [{ role: 'user', content: prompt }],
       }),
       CALL_TIMEOUT_MS,
