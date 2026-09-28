@@ -5,6 +5,9 @@ on:
     - cron: '0 16 * * *' # 8 AM PT (UTC-8) / 9 AM PDT (UTC-7) — runs at 16:00 UTC year-round
   workflow_dispatch:      # allows manual trigger from GitHub Actions UI
 
+permissions:
+  contents: read
+
 jobs:
   run-agent:
     name: Run agent loop

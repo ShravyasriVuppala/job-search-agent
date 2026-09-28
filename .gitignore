@@ -8,7 +8,8 @@
 # User data (DO NOT COMMIT)
 resume.pdf
 resume.txt
-*.pdf              # All PDFs (safer catch-all)
+# All PDFs (safer catch-all)
+*.pdf
 
 # Logs
 logs/
