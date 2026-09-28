@@ -24,8 +24,10 @@ async function main(): Promise<void> {
     const coverLetterService = new CoverLetterService(claudeAnalysisService);
     const app = createApp(config.locationPriority, coverLetterService);
     const port = parseInt(process.env['PORT'] ?? '3001', 10);
-    const server: Server = app.listen(port, () => {
-      logger.info(`REST API listening on port ${port}`);
+    // The API has no auth — bind to loopback so it isn't reachable from the local network.
+    const host = process.env['HOST'] ?? '127.0.0.1';
+    const server: Server = app.listen(port, host, () => {
+      logger.info(`REST API listening on ${host}:${port}`);
     });
 
     logger.info('System ready');
